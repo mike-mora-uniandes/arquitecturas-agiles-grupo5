@@ -20,8 +20,8 @@ services:
   # ----------------------------- Infraestructura -----------------------------
 
   rabbitmq:
-    # Dueño: Michael. Por ahora imagen oficial; si necesita definiciones de
-    # colas / plugins propias, se cambia a  build: ./rabbitmq
+    # Por ahora imagen oficial; si se necesitan definiciones de colas / plugins
+    # propias, se cambia a  build: ./rabbitmq
     image: rabbitmq:3.13-management-alpine
     ports:
       - "5672:5672"     # AMQP
@@ -33,7 +33,7 @@ services:
       retries: 10
 
   redis:
-    # Dueño: Jeffrey. Caché de datos externos de MS PerfilRiesgo (ASR2).
+    # Caché de datos externos de MS PerfilRiesgo (ASR2).
     build: ./redis
     image: solventa/redis:latest
     ports:
@@ -45,7 +45,7 @@ services:
       retries: 10
 
   wiremock:
-    # Dueño: Lore. Simula Open Data / Open Finance. Aún sin mappings.
+    # Simula Open Data / Open Finance. Aún sin mappings.
     image: wiremock/wiremock:3.9.2
     ports:
       - "8080:8080"
@@ -54,7 +54,7 @@ services:
 
   ms-riesgos:
     <<: *ms-common
-    # Dueño: Lore. Aquí solo el andamiaje para que compose levante.
+    # Solo el andamiaje para que compose levante; sin lógica de negocio.
     build: ./ms-riesgos
     ports:
       - "5001:5000"
@@ -65,7 +65,7 @@ services:
 
   ms-perfil-riesgo:
     <<: *ms-common
-    # Dueño: Jeffrey. Estructura base; sin lógica de ASR1/2/3 todavía.
+    # Estructura base; sin lógica de ASR1/2/3 todavía.
     build: ./ms-perfil-riesgo
     ports:
       - "5002:5000"
@@ -80,7 +80,7 @@ services:
 
   ms-notificaciones:
     <<: *ms-common
-    # Dueño: Michael. Aquí solo el andamiaje.
+    # Solo el andamiaje; sin lógica de negocio.
     build: ./ms-notificaciones
     ports:
       - "5003:5000"

@@ -1,7 +1,7 @@
 # ms-notificaciones
 
-**Dueño: Michael.** En esta rama solo está el andamiaje: el servicio construye,
-arranca y responde `GET /health`. No hay lógica de negocio.
+En esta rama solo está el andamiaje: el servicio construye, arranca y responde
+`GET /health`. No hay lógica de negocio.
 
 Pendiente:
 - Consumidor del resultado desde RabbitMQ con ack manual (`tareas/`).
