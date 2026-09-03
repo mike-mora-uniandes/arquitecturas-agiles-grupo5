@@ -1,0 +1,8 @@
+.env
+*.db
+__pycache__/
+
+# El .gitignore raíz ignora 'rabbitmq/' (pensado para datos de runtime);
+# aquí 'rabbitmq/' es código fuente de la imagen del broker.
+!rabbitmq/
+

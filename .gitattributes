@@ -1,0 +1,4 @@
+# Normaliza saltos de línea a LF en todo el repo.
+# Los scripts .sh y los archivos que se ejecutan dentro de contenedores Linux
+# se romperían con CRLF, así que se fuerza LF en todas las plataformas.
+* text=auto eol=lf
