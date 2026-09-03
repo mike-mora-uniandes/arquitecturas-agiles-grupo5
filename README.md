@@ -104,15 +104,6 @@ Entrega de **estructura base**: los servicios construyen, arrancan y responden s
 `/health`. Todavía **no** hay lógica de negocio ni implementación de las tácticas
 ASR1 / ASR2 / ASR3.
 
-## Reparto de tareas
-
-| Integrante | Responsabilidad |
-|---|---|
-| Jeffrey | estructura + docker-compose + imagen base Flask/Python; MS PerfilRiesgo + imagen Redis |
-| Lore | MS Riesgos + imagen Wiremock |
-| Michael | MS Notificaciones + imagen RabbitMQ |
-| Dani | OpenTelemetry (qué medir y dónde) + visualización en Grafana |
-
 ## Flujo de trabajo
 
 - Ramas de trabajo desde `develop` con prefijo `feature/`.
