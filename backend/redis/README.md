@@ -26,9 +26,9 @@ idempotencia.
 | `category` | string | `LOW` \| `MEDIUM` \| `HIGH` |
 | `calculated_at` | string (ISO-8601 UTC) | antigüedad del respaldo |
 | `model_version` | string | versión del algoritmo |
-| `source` | string | siempre `LIVE_EVALUATION` en un respaldo |
+| `snapshot_type` | string | siempre `LIVE_EVALUATION` (un respaldo nace de un cálculo exitoso) |
 | `correlation_id` | string | evaluación que lo generó |
-| `sources` | object | `{ "open_data": "ok", "open_finance": "ok" }` |
+| `sources` | object | `{ "open_data": "ok", "open_finance": "ok" }` — solo para análisis |
 
 ## Seed
 
