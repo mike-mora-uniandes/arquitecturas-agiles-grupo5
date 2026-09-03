@@ -1,10 +1,18 @@
-#!/bin/sh
-set -e
+#!/usr/bin/env bash
+# API + worker Celery en el mismo contenedor. Si cualquiera de los dos termina,
+# se tumba el contenedor para que el fallo sea visible en 'docker compose ps'.
+set -euo pipefail
 
-# Prepara el esquema local (modelo de escritura del microservicio).
-python build_database.py
+opentelemetry-instrument celery -A tareas.evaluacion:celery_app worker \
+  --loglevel="${LOG_LEVEL:-info}" \
+  --concurrency="${CELERY_CONCURRENCY:-4}" &
+worker_pid=$!
 
-# API HTTP del microservicio.
-# El worker de Celery se añadirá aquí cuando exista la lógica de evaluación:
-#   celery -A tareas.evaluacion worker --loglevel="${LOG_LEVEL:-info}" &
-exec gunicorn --bind 0.0.0.0:5000 --workers 1 --access-logfile - "app:app"
+opentelemetry-instrument gunicorn \
+  --bind 0.0.0.0:5000 --workers 1 --access-logfile - "app:app" &
+api_pid=$!
+
+wait -n
+echo ">> Un proceso terminó; deteniendo el contenedor."
+kill "$worker_pid" "$api_pid" 2>/dev/null || true
+exit 1

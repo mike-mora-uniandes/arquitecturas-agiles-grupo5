@@ -7,12 +7,6 @@ import os
 
 
 class Config:
-    # Persistencia local (modelo de escritura del microservicio).
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL", "sqlite:////backend/perfil-riesgo.db"
-    )
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-
     # Infraestructura.
     RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672//")
     REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -24,10 +18,16 @@ class Config:
     )
 
     # Tácticas de disponibilidad (aún sin implementar).
-    DETECCION_TIMEOUT_MS = int(os.getenv("DETECCION_TIMEOUT_MS", "700"))      # ASR1
-    RETRY_MAX = int(os.getenv("RETRY_MAX", "3"))                             # ASR3
-    RETRY_BACKOFF_BASE_MS = int(os.getenv("RETRY_BACKOFF_BASE_MS", "200"))   # ASR3
-    RETRY_PRESUPUESTO_MS = int(os.getenv("RETRY_PRESUPUESTO_MS", "5000"))    # ASR3
-    CACHE_TTL_S = int(os.getenv("CACHE_TTL_S", "86400"))                     # ASR2
+    DETECTION_TIMEOUT_MS = int(os.getenv("DETECTION_TIMEOUT_MS", "700"))      # ASR1
+    RETRY_MAX = int(os.getenv("RETRY_MAX", "3"))                            # ASR3
+    RETRY_BACKOFF_BASE_MS = int(os.getenv("RETRY_BACKOFF_BASE_MS", "200"))  # ASR3
+    RETRY_BUDGET_MS = int(os.getenv("RETRY_BUDGET_MS", "5000"))            # ASR3
+    CACHE_TTL_S = int(os.getenv("CACHE_TTL_S", "86400"))                  # ASR2
+
+    # Idempotencia: clave processed:{correlation_id}.
+    PROCESSED_TTL_S = int(os.getenv("PROCESSED_TTL_S", "3600"))
+
+    # Worker Celery.
+    CELERY_CONCURRENCY = int(os.getenv("CELERY_CONCURRENCY", "4"))
 
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
