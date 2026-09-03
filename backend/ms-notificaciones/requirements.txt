@@ -1,0 +1,2 @@
+# Extras de MS Notificaciones sobre la imagen base (solventa/flask-base).
+# Sin dependencias propias por ahora; añádelas aquí.

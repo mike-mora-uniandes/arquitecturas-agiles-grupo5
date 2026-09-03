@@ -1,0 +1,90 @@
+# Orquestación local del backend de Solventa.
+# Requisito previo: construir la imagen base con  sh build-base.sh
+# (equivale a:  docker build -t solventa/flask-base:latest ./base-image)
+
+name: solventa-backend
+
+x-ms-common: &ms-common
+  env_file: .env
+  restart: "no"        # si un servicio falla, que quede visible, no en bucle
+
+x-ms-healthcheck: &ms-healthcheck
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 15s
+
+services:
+
+  # ----------------------------- Infraestructura -----------------------------
+
+  rabbitmq:
+    # Dueño: Michael. Por ahora imagen oficial; si necesita definiciones de
+    # colas / plugins propias, se cambia a  build: ./rabbitmq
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # consola de administración
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    # Dueño: Jeffrey. Caché de datos externos de MS PerfilRiesgo (ASR2).
+    build: ./redis
+    image: solventa/redis:latest
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  wiremock:
+    # Dueño: Lore. Simula Open Data / Open Finance. Aún sin mappings.
+    image: wiremock/wiremock:3.9.2
+    ports:
+      - "8080:8080"
+
+  # ----------------------------- Microservicios -----------------------------
+
+  ms-riesgos:
+    <<: *ms-common
+    # Dueño: Lore. Aquí solo el andamiaje para que compose levante.
+    build: ./ms-riesgos
+    ports:
+      - "5001:5000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck: *ms-healthcheck
+
+  ms-perfil-riesgo:
+    <<: *ms-common
+    # Dueño: Jeffrey. Estructura base; sin lógica de ASR1/2/3 todavía.
+    build: ./ms-perfil-riesgo
+    ports:
+      - "5002:5000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      wiremock:
+        condition: service_started
+    healthcheck: *ms-healthcheck
+
+  ms-notificaciones:
+    <<: *ms-common
+    # Dueño: Michael. Aquí solo el andamiaje.
+    build: ./ms-notificaciones
+    ports:
+      - "5003:5000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck: *ms-healthcheck
