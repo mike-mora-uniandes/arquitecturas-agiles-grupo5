@@ -3,7 +3,22 @@
 Con `OTEL_SDK_DISABLED=true` (valor por defecto fuera del experimento) el tracer
 y el meter son *no-op*: el código de negocio no cambia.
 """
+import logging
+
 from opentelemetry import metrics, trace
+
+
+class _FiltrarDetachRuido(logging.Filter):
+    """opentelemetry-instrumentation-celery 0.48b0 registra de forma espuria
+    'Failed to detach context' con el pool prefork (bug conocido de contrib).
+    Es inocuo; se filtra para no ensuciar los logs del worker.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "Failed to detach context" not in record.getMessage()
+
+
+logging.getLogger("opentelemetry.context").addFilter(_FiltrarDetachRuido())
 
 tracer = trace.get_tracer("solventa.perfil")
 _meter = metrics.get_meter("solventa.perfil")

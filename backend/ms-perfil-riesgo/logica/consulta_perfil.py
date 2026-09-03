@@ -1,11 +1,11 @@
 """ConsultaPerfil — llamadas concurrentes a las fuentes externas con detección
 (ASR1) y reintentos (ASR3) acotados por un presupuesto de tiempo común.
 """
+import contextvars
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
-from opentelemetry import context as otel_context
 from tenacity import (
     Retrying,
     retry_if_exception_type,
@@ -100,15 +100,15 @@ def _consultar_fuente(system: str, customer_id: str, deadline: float) -> Resulta
 def consultar_perfil(customer_id: str) -> dict:
     """Devuelve {'open_data': ResultadoFuente, 'open_finance': ResultadoFuente}."""
     deadline = time.monotonic() + Config.RETRY_BUDGET_MS / 1000
-    ctx = otel_context.get_current()
 
     def _run(system: str) -> ResultadoFuente:
-        token = otel_context.attach(ctx)
-        try:
-            return _consultar_fuente(system, customer_id, deadline)
-        finally:
-            otel_context.detach(token)
+        return _consultar_fuente(system, customer_id, deadline)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        futuros = {s: pool.submit(_run, s) for s in ("open_data", "open_finance")}
+        # copy_context() propaga el contexto OTel al hilo → los spans hijos
+        # (profile.detection / profile.retry) cuelgan de profile.evaluation.
+        futuros = {
+            s: pool.submit(contextvars.copy_context().run, _run, s)
+            for s in ("open_data", "open_finance")
+        }
         return {s: f.result() for s, f in futuros.items()}
