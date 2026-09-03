@@ -1,27 +1,43 @@
 # ms-perfil-riesgo
 
-Estructura base. El servicio construye, arranca (API + worker Celery en el mismo
-contenedor) y responde `GET /health`. **Aún sin lógica de ASR1/ASR2/ASR3.**
+Microservicio de perfil de riesgo. Consume `perfil.evaluate_profile` de
+RabbitMQ, aplica las tácticas ASR1/ASR2/ASR3 y publica `ProfileEvaluationResult`.
+API + worker Celery en el mismo contenedor (`run.sh`, `wait -n`). Sin persistencia
+local: el perfil vive en Redis y se publica al broker.
 
-- Sin persistencia local: el perfil vive en Redis y se publica al broker.
-- `GET /profiles/<customer_id>` → `501` (fuera de alcance del experimento).
-- `run.sh` levanta worker + gunicorn; si cualquiera muere, el contenedor cae.
+> La implementación asume el contrato **propuesto** de `../DESIGN.md` §2
+> (mensajes, topología RabbitMQ, esquema de Wiremock, nombres OTel). Si el equipo
+> lo cambia, se ajusta `config.py` y `mensajes.py`.
 
-## Flujo objetivo (a implementar)
+## Flujo (`tareas/evaluacion.py`, ver DESIGN.md §1.4)
 
-`ProfileEvaluationRequest` (RabbitMQ) → idempotencia (`processed:{correlation_id}`)
+`ProfileEvaluationRequest` → idempotencia (`processed:{correlation_id}`)
 → `ConsultaPerfil` (Open Data + Open Finance concurrentes)
-→ `deteccion_excepciones` (ASR1) → retry con `tenacity` (ASR3)
-→ `manejo_excepciones` + `cache_externos` (ASR2) → `calculo_perfil`
-→ publicar `ProfileEvaluationResult`.
+→ detección (ASR1) → retry con `tenacity`, presupuesto común (ASR3)
+→ si ambas OK: `CalculoPerfil` + refresco de caché · si no: enmascaramiento con
+caché (ASR2) → publicar resultado → marcar `processed` → `ack`.
 
-| Componente (`logica/`) | Responsabilidad | ASR |
+| Módulo (`logica/`) | Rol | ASR |
 |---|---|---|
-| `deteccion_excepciones.py` | clasificar fallo de fuente externa (< 700 ms) | ASR1 |
-| `consulta_perfil.py` | orquestar Open Data / Open Finance | ASR1/ASR3 |
+| `fuentes_externas.py` | cliente HTTP + validación de esquema | — |
+| `deteccion_excepciones.py` | clasifica el fallo (`timeout`/`connection`/`http_5xx`/`anomalous`) | ASR1 |
+| `consulta_perfil.py` | llamadas concurrentes + retry + presupuesto | ASR1 / ASR3 |
 | `calculo_perfil.py` | `score` / `category` | — |
-| `manejo_excepciones.py` | escalar al agotar reintentos | ASR2 |
-| `cache_externos.py` | `GET`/`SET` en Redis (< 100 ms) | ASR2 |
+| `manejo_excepciones.py` | escala a caché, arma resultado degradado | ASR2 |
+| `cache_externos.py` | `GET`/`SET` `profile:{customer_id}` | ASR2 |
 
-Contratos de mensajes, topología RabbitMQ, esquema de Wiremock y spans OTel:
-pendientes de acordar con el equipo.
+`telemetria.py` — spans `profile.*` y métricas `solventa_profile_*` (§2.4).
+`topologia.py` — declara el dead-letter exchange y sus colas al arrancar.
+
+## Pruebas
+
+```sh
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest tests
+```
+
+## Variables de entorno
+
+Ver `backend/.env.example`. Parámetros de tácticas: `DETECTION_TIMEOUT_MS`,
+`RETRY_MAX`, `RETRY_BACKOFF_BASE_MS`, `RETRY_BUDGET_MS`, `CACHE_TTL_S`,
+`CACHE_ASR2_THRESHOLD_MS`, `PROCESSED_TTL_S`, `CELERY_CONCURRENCY`.
