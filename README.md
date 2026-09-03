@@ -58,12 +58,21 @@ repositorio de referencia `MISW4201-202614-Backend-Grupo08`.
 
 Requisitos: Docker Desktop en ejecución con Compose v2 (`docker compose version`).
 
+Desde **PowerShell** (Windows):
+
+```powershell
+cd backend
+./build-base.ps1
+```
+
+Desde **Git Bash / Linux / macOS**:
+
 ```sh
 cd backend
 sh build-base.sh
 ```
 
-`build-base.sh`:
+Ambos scripts hacen lo mismo:
 
 1. crea `.env` a partir de `.env.example` si no existe,
 2. construye la imagen base `solventa/flask-base` (paso previo obligatorio; no es
