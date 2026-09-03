@@ -3,7 +3,9 @@
 # (equivale a:  docker build -t solventa/flask-base:latest ./base-image)
 #
 # Modo normal:      docker compose up
-# Modo experimento: docker compose --profile experimento up   (repuebla Redis)
+# Modo experimento: docker compose --profile experimento up
+#   (añade redis-seed, otel-collector, prometheus, grafana y locust)
+#   Para emitir métricas: OTEL_SDK_DISABLED=false en .env
 
 name: solventa-backend
 
@@ -18,6 +20,12 @@ x-ms-healthcheck: &ms-healthcheck
   retries: 10
   start_period: 15s
 
+x-infra-limits: &infra-limits
+  resources:
+    limits:
+      cpus: "0.5"
+      memory: 256M
+
 services:
 
   # ----------------------------- Infraestructura -----------------------------
@@ -29,6 +37,11 @@ services:
     ports:
       - "5672:5672"     # AMQP
       - "15672:15672"   # consola de administración
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -66,15 +79,68 @@ services:
     entrypoint: ["sh", "-c", "redis-cli -h redis < /seed/profiles.redis && echo 'redis-seed OK'"]
 
   wiremock:
-    # Simula Open Data / Open Finance. Aún sin mappings.
+    # Simula Open Data / Open Finance; el escenario se elige por customer_id.
+    # Límite holgado: no debe ser el cuello de botella del experimento.
     image: wiremock/wiremock:3.9.2
+    command: ["--global-response-templating", "--disable-banner"]
+    volumes:
+      - ./wiremock/mappings:/home/wiremock/mappings:ro
     ports:
       - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
-  # --- Observabilidad y carga (perfil 'experimento') ---
-  # Los servicios otel-collector, grafana y locust se declararán aquí bajo
-  # 'profiles: ["experimento"]' cuando su configuración esté lista
-  # (ver backend/observabilidad/).
+  # --------------------- Observabilidad y carga (perfil) --------------------
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    profiles: ["experimento"]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observabilidad/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4318:4318"     # OTLP http
+      - "9464:9464"     # métricas expuestas para Prometheus
+    deploy: *infra-limits
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: ["experimento"]
+    volumes:
+      - ./observabilidad/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    deploy: *infra-limits
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: ["experimento"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    deploy: *infra-limits
+
+  locust:
+    image: locustio/locust:2.31.5
+    profiles: ["experimento"]
+    volumes:
+      - ./experimento:/mnt/locust:ro
+    command: ["-f", "/mnt/locust/locustfile.py", "--host", "http://ms-riesgos:5000"]
+    ports:
+      - "8089:8089"
+    depends_on:
+      - ms-riesgos
+    deploy: *infra-limits
 
   # ----------------------------- Microservicios -----------------------------
 
@@ -86,6 +152,7 @@ services:
       OTEL_SERVICE_NAME: ms-riesgos
     ports:
       - "5001:5000"
+    deploy: *infra-limits
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -93,7 +160,7 @@ services:
 
   ms-perfil-riesgo:
     <<: *ms-common
-    # Estructura base; sin lógica de ASR1/2/3 todavía.
+    # Lógica de ASR1/ASR2/ASR3 según backend/DESIGN.md §1.4.
     build: ./ms-perfil-riesgo
     environment:
       OTEL_SERVICE_NAME: ms-perfil-riesgo
@@ -121,6 +188,7 @@ services:
       OTEL_SERVICE_NAME: ms-notificaciones
     ports:
       - "5003:5000"
+    deploy: *infra-limits
     depends_on:
       rabbitmq:
         condition: service_healthy
