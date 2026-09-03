@@ -11,12 +11,21 @@ su `/health`, nada más.
 
 ## Ejecutar
 
+Desde **PowerShell** (Windows):
+
+```powershell
+cd backend
+./build-base.ps1
+```
+
+Desde **Git Bash / Linux / macOS**:
+
 ```sh
 cd backend
 sh build-base.sh
 ```
 
-`build-base.sh`:
+El script (`.ps1` o `.sh`):
 
 1. crea `.env` desde `.env.example` si no existe,
 2. construye la imagen general `solventa/flask-base` (paso previo obligatorio,
