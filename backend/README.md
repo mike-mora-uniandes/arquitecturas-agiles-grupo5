@@ -38,16 +38,26 @@ Detener:
 docker compose down
 ```
 
+### Modo experimento
+
+```sh
+docker compose --profile experimento up
+```
+
+Añade `redis-seed` (repuebla el caché con `redis/seed/profiles.redis`) y, cuando
+estén listos, `otel-collector` / `grafana` / `locust`.
+
 ## Servicios
 
 | Servicio | Puerto(s) | Estado en esta entrega |
 |---|---|---|
 | `ms-riesgos` | 5001 | andamiaje (`/health`) |
-| `ms-perfil-riesgo` | 5002 | estructura base, **sin** lógica ASR |
+| `ms-perfil-riesgo` | 5002 | estructura base + API/worker en un contenedor, **sin** lógica ASR |
 | `ms-notificaciones` | 5003 | andamiaje (`/health`) |
 | `rabbitmq` | 5672 / 15672 | imagen oficial |
-| `redis` | 6379 | imagen propia (`./redis`) |
+| `redis` | 6379 | imagen propia (`./redis`), `noeviction`, efímero |
 | `wiremock` | 8080 | imagen oficial, sin mappings |
+| `redis-seed` | — | perfil `experimento`, one-shot |
 
 Comprobar que todo está arriba:
 
@@ -66,19 +76,19 @@ Plantilla común (referencia: `ms-perfil-riesgo/`):
 ├── Dockerfile          # FROM solventa/flask-base
 ├── .dockerignore
 ├── requirements.txt    # extras del servicio sobre la imagen base
-├── run.sh              # arranque (gunicorn; worker Celery cuando exista lógica)
+├── run.sh              # arranque (gunicorn; + worker Celery en ms-perfil-riesgo)
 ├── app.py              # Flask app + /health
 ├── config.py           # configuración desde variables de entorno
-├── extensiones.py      # db, celery_app
-├── modelos/            # modelos SQLAlchemy        (solo si el servicio persiste)
+├── extensiones.py      # celery_app (+ redis_client en ms-perfil-riesgo)
 ├── vistas/             # recursos Flask-RESTful
 ├── logica/             # reglas de negocio
 ├── tareas/             # tareas Celery (consumidores/publicadores del broker)
+├── modelos/            # modelos SQLAlchemy   (solo si el servicio persiste)
 └── tests/
 ```
 
 ## Pendiente
 
-- `rabbitmq/`, `wiremock/`, `observabilidad/` (OpenTelemetry + Grafana)
+- `rabbitmq/`, `wiremock/`, `observabilidad/` (OpenTelemetry + Grafana), `locust`
 - Lógica de las tácticas ASR1 / ASR2 / ASR3 en `ms-perfil-riesgo/logica/`
 - Implementación de `ms-riesgos` y `ms-notificaciones`

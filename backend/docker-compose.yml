@@ -1,6 +1,9 @@
 # Orquestación local del backend de Solventa.
 # Requisito previo: construir la imagen base con  sh build-base.sh
 # (equivale a:  docker build -t solventa/flask-base:latest ./base-image)
+#
+# Modo normal:      docker compose up
+# Modo experimento: docker compose --profile experimento up   (repuebla Redis)
 
 name: solventa-backend
 
@@ -38,11 +41,29 @@ services:
     image: solventa/redis:latest
     ports:
       - "6379:6379"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 192M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  redis-seed:
+    # Prepobla el caché con los perfiles de prueba (backend/redis/seed).
+    # Idempotente: se re-ejecuta en cada 'docker compose --profile experimento up'.
+    image: redis:7-alpine
+    profiles: ["experimento"]
+    restart: "no"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./redis/seed:/seed:ro
+    entrypoint: ["sh", "-c", "redis-cli -h redis < /seed/profiles.redis && echo 'redis-seed OK'"]
 
   wiremock:
     # Simula Open Data / Open Finance. Aún sin mappings.
@@ -50,12 +71,19 @@ services:
     ports:
       - "8080:8080"
 
+  # --- Observabilidad y carga (perfil 'experimento') ---
+  # Los servicios otel-collector, grafana y locust se declararán aquí bajo
+  # 'profiles: ["experimento"]' cuando su configuración esté lista
+  # (ver backend/observabilidad/).
+
   # ----------------------------- Microservicios -----------------------------
 
   ms-riesgos:
     <<: *ms-common
     # Solo el andamiaje para que compose levante; sin lógica de negocio.
     build: ./ms-riesgos
+    environment:
+      OTEL_SERVICE_NAME: ms-riesgos
     ports:
       - "5001:5000"
     depends_on:
@@ -67,8 +95,15 @@ services:
     <<: *ms-common
     # Estructura base; sin lógica de ASR1/2/3 todavía.
     build: ./ms-perfil-riesgo
+    environment:
+      OTEL_SERVICE_NAME: ms-perfil-riesgo
     ports:
       - "5002:5000"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -82,6 +117,8 @@ services:
     <<: *ms-common
     # Solo el andamiaje; sin lógica de negocio.
     build: ./ms-notificaciones
+    environment:
+      OTEL_SERVICE_NAME: ms-notificaciones
     ports:
       - "5003:5000"
     depends_on:

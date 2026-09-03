@@ -1,5 +1,5 @@
 # Extras de MS PerfilRiesgo sobre la imagen base (solventa/flask-base).
-# Caché de datos externos (ASR2).
+# Cliente de la caché de datos externos (ASR2) e idempotencia.
 redis==5.2.1
-# Cliente HTTP hacia las fuentes externas (Open Data / Open Finance).
-requests==2.32.3
+# Reintentos hacia las fuentes externas (ASR3): backoff exponencial + jitter.
+tenacity==9.0.0
