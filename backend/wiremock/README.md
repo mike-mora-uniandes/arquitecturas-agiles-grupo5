@@ -1,7 +1,5 @@
 # wiremock
 
-**Dueño: Lore.**
-
 Simula las fuentes externas Open Data / Open Finance para los 3 escenarios de
 fallo del experimento (ok / timeout / error 5xx).
 

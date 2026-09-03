@@ -1,7 +1,7 @@
 """Punto de entrada HTTP de MS Riesgos (andamiaje).
 
 Expone solo el health-check. La recepción de solicitudes y la publicación al
-broker las implementará el dueño del servicio.
+broker se implementarán aparte.
 """
 from flask import Flask
 from flask_restful import Api

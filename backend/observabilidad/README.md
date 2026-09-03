@@ -1,7 +1,5 @@
 # observabilidad
 
-**Dueño: Dani.**
-
 OpenTelemetry (qué medir y dónde) + visualización en Grafana según los ASRs y
 la hipótesis del experimento.
 

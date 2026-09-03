@@ -40,14 +40,14 @@ docker compose down
 
 ## Servicios
 
-| Servicio | Puerto(s) | Dueño | Estado en esta entrega |
-|---|---|---|---|
-| `ms-riesgos` | 5001 | Lore | andamiaje (`/health`) |
-| `ms-perfil-riesgo` | 5002 | Jeffrey | estructura base, **sin** lógica ASR |
-| `ms-notificaciones` | 5003 | Michael | andamiaje (`/health`) |
-| `rabbitmq` | 5672 / 15672 | Michael | imagen oficial |
-| `redis` | 6379 | Jeffrey | imagen propia (`./redis`) |
-| `wiremock` | 8080 | Lore | imagen oficial, sin mappings |
+| Servicio | Puerto(s) | Estado en esta entrega |
+|---|---|---|
+| `ms-riesgos` | 5001 | andamiaje (`/health`) |
+| `ms-perfil-riesgo` | 5002 | estructura base, **sin** lógica ASR |
+| `ms-notificaciones` | 5003 | andamiaje (`/health`) |
+| `rabbitmq` | 5672 / 15672 | imagen oficial |
+| `redis` | 6379 | imagen propia (`./redis`) |
+| `wiremock` | 8080 | imagen oficial, sin mappings |
 
 Comprobar que todo está arriba:
 
@@ -77,7 +77,7 @@ Plantilla común (referencia: `ms-perfil-riesgo/`):
 └── tests/
 ```
 
-## Pendiente (otros integrantes)
+## Pendiente
 
 - `rabbitmq/`, `wiremock/`, `observabilidad/` (OpenTelemetry + Grafana)
 - Lógica de las tácticas ASR1 / ASR2 / ASR3 en `ms-perfil-riesgo/logica/`
