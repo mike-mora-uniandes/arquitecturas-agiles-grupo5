@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 from app import crear_app
@@ -40,3 +41,29 @@ def test_post_riesgo_rechaza_payload_invalido():
     assert response.status_code == 400
     body = response.get_json()
     assert body["error"] == "cliente_id es obligatorio"
+
+
+@patch("tareas.publicacion.pika")
+def test_publicar_solicitud_envia_mensaje_con_correlation_id(mock_pika):
+    from tareas.publicacion import publicar_solicitud
+
+    solicitud = {
+        "correlation_id": "corr-123",
+        "cliente_id": "C-1001",
+        "analista_id": "A-42",
+        "tipo_evaluacion": "riesgo",
+        "detalles": {"fuente": "manual"},
+    }
+
+    publicado = publicar_solicitud(solicitud)
+
+    assert publicado == solicitud
+    mock_pika.BlockingConnection.assert_called_once()
+    channel = mock_pika.BlockingConnection.return_value.channel.return_value
+    channel.basic_publish.assert_called_once()
+
+    kwargs = channel.basic_publish.call_args.kwargs
+    body = json.loads(kwargs["body"])
+    assert body["correlation_id"] == "corr-123"
+    assert body["cliente_id"] == "C-1001"
+    assert kwargs["routing_key"] == "profile_evaluation_request"
