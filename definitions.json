@@ -1,0 +1,54 @@
+{
+  "rabbit_version": "3.13.7",
+  "rabbitmq_version": "3.13.7",
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "perfil-riesgo.events",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "resultado-evaluacion-perfil",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "solicitud-evaluacion-perfil",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "perfil-riesgo.events",
+      "vhost": "/",
+      "destination": "resultado-evaluacion-perfil",
+      "destination_type": "queue",
+      "routing_key": "resultado.evaluacion.perfil",
+      "arguments": {}
+    },
+    {
+      "source": "perfil-riesgo.events",
+      "vhost": "/",
+      "destination": "solicitud-evaluacion-perfil",
+      "destination_type": "queue",
+      "routing_key": "solicitud.evaluacion.perfil",
+      "arguments": {}
+    }
+  ]
+}
