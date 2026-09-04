@@ -1,6 +1,11 @@
 # Orquestación local del backend de Solventa.
 # Requisito previo: construir la imagen base con  sh build-base.sh
 # (equivale a:  docker build -t solventa/flask-base:latest ./base-image)
+#
+# Modo normal:      docker compose up
+# Modo experimento: docker compose --profile experimento up
+#   (añade redis-seed, otel-collector, prometheus, grafana y locust)
+#   Para emitir métricas: OTEL_SDK_DISABLED=false en .env
 
 name: solventa-backend
 
@@ -15,17 +20,28 @@ x-ms-healthcheck: &ms-healthcheck
   retries: 10
   start_period: 15s
 
+x-infra-limits: &infra-limits
+  resources:
+    limits:
+      cpus: "0.5"
+      memory: 256M
+
 services:
 
   # ----------------------------- Infraestructura -----------------------------
 
   rabbitmq:
-    # Dueño: Michael. Por ahora imagen oficial; si necesita definiciones de
-    # colas / plugins propias, se cambia a  build: ./rabbitmq
+    # Por ahora imagen oficial; si se necesitan definiciones de colas / plugins
+    # propias, se cambia a  build: ./rabbitmq
     image: rabbitmq:3.13-management-alpine
     ports:
       - "5672:5672"     # AMQP
       - "15672:15672"   # consola de administración
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -33,31 +49,110 @@ services:
       retries: 10
 
   redis:
-    # Dueño: Jeffrey. Caché de datos externos de MS PerfilRiesgo (ASR2).
+    # Caché de datos externos de MS PerfilRiesgo (ASR2).
     build: ./redis
     image: solventa/redis:latest
     ports:
       - "6379:6379"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 192M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
 
+  redis-seed:
+    # Prepobla el caché con los perfiles de prueba (backend/redis/seed).
+    # Idempotente: se re-ejecuta en cada 'docker compose --profile experimento up'.
+    image: redis:7-alpine
+    profiles: ["experimento"]
+    restart: "no"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./redis/seed:/seed:ro
+    entrypoint: ["sh", "-c", "redis-cli -h redis < /seed/profiles.redis && echo 'redis-seed OK'"]
+
   wiremock:
-    # Dueño: Lore. Simula Open Data / Open Finance. Aún sin mappings.
+    # Simula Open Data / Open Finance; el escenario se elige por customer_id.
+    # Límite holgado: no debe ser el cuello de botella del experimento.
     image: wiremock/wiremock:3.9.2
+    command: ["--global-response-templating", "--disable-banner"]
+    volumes:
+      - ./wiremock/mappings:/home/wiremock/mappings:ro
     ports:
       - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  # --------------------- Observabilidad y carga (perfil) --------------------
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    profiles: ["experimento"]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observabilidad/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4318:4318"     # OTLP http
+      - "9464:9464"     # métricas expuestas para Prometheus
+    deploy: *infra-limits
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: ["experimento"]
+    volumes:
+      - ./observabilidad/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    deploy: *infra-limits
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: ["experimento"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    deploy: *infra-limits
+
+  locust:
+    image: locustio/locust:2.31.5
+    profiles: ["experimento"]
+    volumes:
+      - ./experimento:/mnt/locust:ro
+    command: ["-f", "/mnt/locust/locustfile.py", "--host", "http://ms-riesgos:5000"]
+    ports:
+      - "8089:8089"
+    depends_on:
+      - ms-riesgos
+    deploy: *infra-limits
 
   # ----------------------------- Microservicios -----------------------------
 
   ms-riesgos:
     <<: *ms-common
-    # Dueño: Lore. Aquí solo el andamiaje para que compose levante.
+    # Solo el andamiaje para que compose levante; sin lógica de negocio.
     build: ./ms-riesgos
+    environment:
+      OTEL_SERVICE_NAME: ms-riesgos
     ports:
       - "5001:5000"
+    deploy: *infra-limits
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -65,10 +160,17 @@ services:
 
   ms-perfil-riesgo:
     <<: *ms-common
-    # Dueño: Jeffrey. Estructura base; sin lógica de ASR1/2/3 todavía.
+    # Lógica de ASR1/ASR2/ASR3 según backend/DESIGN.md §1.4.
     build: ./ms-perfil-riesgo
+    environment:
+      OTEL_SERVICE_NAME: ms-perfil-riesgo
     ports:
       - "5002:5000"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -80,10 +182,13 @@ services:
 
   ms-notificaciones:
     <<: *ms-common
-    # Dueño: Michael. Aquí solo el andamiaje.
+    # Solo el andamiaje; sin lógica de negocio.
     build: ./ms-notificaciones
+    environment:
+      OTEL_SERVICE_NAME: ms-notificaciones
     ports:
       - "5003:5000"
+    deploy: *infra-limits
     depends_on:
       rabbitmq:
         condition: service_healthy

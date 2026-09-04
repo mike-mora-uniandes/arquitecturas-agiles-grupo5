@@ -1,7 +1,7 @@
 """Punto de entrada HTTP de MS Notificaciones (andamiaje).
 
 Expone solo el health-check. El consumo del resultado desde el broker, el
-reintento y el envío a la Dead-Letter Queue los implementará el dueño.
+reintento y el envío a la Dead-Letter Queue se implementarán aparte.
 """
 from flask import Flask
 from flask_restful import Api
