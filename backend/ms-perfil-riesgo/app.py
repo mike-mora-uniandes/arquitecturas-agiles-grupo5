@@ -1,14 +1,14 @@
 """Punto de entrada HTTP de MS PerfilRiesgo.
 
-Por ahora expone solo el health-check; la lógica de evaluación de perfil
-(ASR1/ASR2/ASR3) se construirá sobre esta base. El microservicio no persiste
-localmente: el perfil vive en Redis y se publica al broker.
+La evaluación de perfil (ASR1/ASR2/ASR3) ocurre en el worker Celery; esta app
+solo expone `GET /profiles/<customer_id>` (501, sin persistencia local: el
+perfil vive en Redis y se publica al broker).
 """
 from flask import Flask
 from flask_restful import Api
 
 from config import Config
-from vistas.perfiles_riesgo import HealthResource, ProfileResource
+from vistas.perfiles_riesgo import ProfileResource
 
 
 def crear_app():
@@ -16,7 +16,6 @@ def crear_app():
     app.config.from_object(Config)
 
     api = Api(app)
-    api.add_resource(HealthResource, "/health")
     api.add_resource(ProfileResource, "/profiles/<string:customer_id>")
 
     return app

@@ -8,7 +8,8 @@ idempotencia.
 
 - `maxmemory 128mb`, `maxmemory-policy noeviction` — el caché es un valor de
   respaldo; no debe descartarse por presión de memoria.
-- `save ""`, `appendonly no` — **efímero**. Se repuebla con el seed.
+- `save ""`, `appendonly no` — **efímero**. Se repuebla con el seed en cada
+  arranque del contenedor (ver *Seed*).
 
 ## Esquema de claves (lo implementa MS PerfilRiesgo)
 
@@ -35,8 +36,11 @@ idempotencia.
 `seed/profiles.redis` — comandos `SET ... EX` de los clientes de prueba
 `C001`–`C005`. **`C006` no está a propósito**: prueba el *cache miss* de ASR2.
 
-Lo carga el servicio `redis-seed` (perfil `experimento`) en cada
-`docker compose --profile experimento up`. Es idempotente.
+Lo carga la propia imagen: `entrypoint.sh` arranca `redis-server` y, en cuanto
+responde, ejecuta `redis-cli < profiles.redis`. Ocurre en cada arranque del
+contenedor (`docker compose up`, con o sin perfil `experimento`); es idempotente
+y no requiere servicios ni jobs externos. Se puede apuntar a otro archivo con la
+variable `REDIS_SEED_FILE`.
 
 El `< 100 ms` de ASR2 se mide en MS PerfilRiesgo (span alrededor del `GET`), no
 en Redis.

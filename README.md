@@ -17,7 +17,7 @@ Open Finance.
 | **MS PerfilRiesgo — tácticas ASR1 / ASR2 / ASR3** | ✅ implementadas y verificadas E2E |
 | Wiremock (mappings por `customer_id`) | ✅ |
 | Observabilidad (OTel Collector + Prometheus + Grafana) | ✅ pipeline; faltan dashboards |
-| MS Riesgos · MS Notificaciones | ⏳ andamiaje (`/health`) |
+| MS Riesgos · MS Notificaciones | ⏳ andamiaje (solo construyen y arrancan) |
 
 El diseño y los contratos pendientes de acordar con el equipo (mensajes,
 topología RabbitMQ, esquema de Wiremock, nombres OTel) están en
@@ -35,7 +35,7 @@ topología RabbitMQ, esquema de Wiremock, nombres OTel) están en
     ├── .env.example
     │
     ├── base-image/             # imagen general Flask/Python (solventa/flask-base)
-    ├── redis/                  # imagen Redis + redis.conf + seed/profiles.redis
+    ├── redis/                  # imagen Redis + redis.conf + entrypoint (seed automático)
     │
     ├── ms-perfil-riesgo/       # cálculo + tácticas de disponibilidad (implementado)
     ├── ms-riesgos/             # punto de entrada REST (andamiaje)
@@ -79,16 +79,21 @@ El script crea `.env` desde `.env.example`, construye `solventa/flask-base`
 docker compose --profile experimento up
 ```
 
-Añade `redis-seed` (repuebla el caché), `otel-collector`, `prometheus`,
-`grafana` (`:3000`) y `locust` (`:8089`). Para emitir métricas, en `.env`:
-`OTEL_SDK_DISABLED=false`, `OTEL_TRACES_EXPORTER=otlp`, `OTEL_METRICS_EXPORTER=otlp`.
+Añade `otel-collector`, `prometheus`, `grafana` (`:3000`) y `locust` (`:8089`).
+Para emitir métricas, en `.env`: `OTEL_SDK_DISABLED=false`,
+`OTEL_TRACES_EXPORTER=otlp`, `OTEL_METRICS_EXPORTER=otlp`.
+
+El caché de Redis lo precarga la propia imagen `solventa/redis` al arrancar
+(ejecuta `redis/seed/profiles.redis`); no hay servicio de seed aparte.
 
 ### Verificación
 
 ```sh
-curl http://localhost:5001/health        # ms-riesgos        -> {"servicio":...,"estado":"ok"}
-curl http://localhost:5002/health        # ms-perfil-riesgo  -> {"service":...,"status":"ok"}
-curl http://localhost:5003/health        # ms-notificaciones
+# todos los contenedores en 'running'
+docker compose ps
+
+# el worker de MS PerfilRiesgo llegó a 'ready'
+docker compose logs ms-perfil-riesgo | grep "celery@.* ready"
 
 # pruebas unitarias de MS PerfilRiesgo
 docker compose exec ms-perfil-riesgo sh -c \
@@ -105,9 +110,9 @@ docker compose down                       # o  --profile experimento down -v
 
 | Servicio | Puerto(s) | Descripción |
 |---|---|---|
-| `ms-riesgos` | 5001 | punto de entrada REST (andamiaje) |
-| `ms-perfil-riesgo` | 5002 | evaluación del perfil + ASR1/ASR2/ASR3 (API + worker) |
-| `ms-notificaciones` | 5003 | entrega del resultado (andamiaje) |
+| `ms-riesgos` | 5001 | punto de entrada REST (andamiaje, sin endpoints) |
+| `ms-perfil-riesgo` | 5002 | evaluación del perfil + ASR1/ASR2/ASR3 (worker + `GET /profiles/<id>` → 501) |
+| `ms-notificaciones` | 5003 | entrega del resultado (andamiaje, sin endpoints) |
 | `rabbitmq` | 5672 / 15672 | broker AMQP (consola: `guest` / `guest`) |
 | `redis` | 6379 | caché de respaldo (`noeviction`, efímero) |
 | `wiremock` | 8080 | Open Data / Open Finance simulados |

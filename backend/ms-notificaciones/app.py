@@ -1,21 +1,17 @@
 """Punto de entrada HTTP de MS Notificaciones (andamiaje).
 
-Expone solo el health-check. El consumo del resultado desde el broker, el
-reintento y el envío a la Dead-Letter Queue se implementarán aparte.
+Sin endpoints por ahora: el servicio solo construye y arranca. El consumo del
+resultado desde el broker, el reintento y el envío a la Dead-Letter Queue se
+implementarán aparte.
 """
 from flask import Flask
-from flask_restful import Api
 
 from config import Config
-from vistas.salud import SaludRecurso
 
 
 def crear_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-
-    api = Api(app)
-    api.add_resource(SaludRecurso, "/health")
 
     return app
 

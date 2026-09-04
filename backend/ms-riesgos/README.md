@@ -1,7 +1,7 @@
 # ms-riesgos
 
-En esta rama solo está el andamiaje: el servicio construye, arranca y responde
-`GET /health`. No hay lógica de negocio.
+En esta rama solo está el andamiaje: el servicio construye y arranca. No expone
+endpoints ni tiene lógica de negocio.
 
 Pendiente:
 - Endpoint REST que recibe la solicitud del analista y genera un correlation ID.
