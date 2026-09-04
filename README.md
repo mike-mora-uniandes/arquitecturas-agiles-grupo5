@@ -2,53 +2,55 @@
 
 Repositorio de trabajo del **Grupo 5** para la asignatura **Arquitecturas Ágiles** (MISO).
 
-Contiene el backend del experimento de **disponibilidad** del proyecto **Solventa**:
-tres microservicios que colaboran para evaluar el perfil de riesgo de un cliente
-aplicando las tácticas *Exception Detection*, *Retry* y *Exception Handling*.
+Backend del experimento de **disponibilidad** del proyecto **Solventa**: un
+analista solicita la evaluación del perfil de riesgo de un cliente y el flujo
+aplica tres tácticas — *Exception Detection* (ASR1), *Retry* (ASR3) y
+*Exception Handling* (ASR2) — ante fallos de las fuentes externas Open Data /
+Open Finance.
+
+## Estado
+
+| Componente | Estado |
+|---|---|
+| Estructura + `docker-compose` + imagen base Flask/Python | ✅ |
+| Imagen Redis (caché de respaldo, ASR2) | ✅ |
+| **MS PerfilRiesgo — tácticas ASR1 / ASR2 / ASR3** | ✅ implementadas y verificadas E2E |
+| Wiremock (mappings por `customer_id`) | ✅ |
+| Observabilidad (OTel Collector + Prometheus + Grafana) | ✅ pipeline; faltan dashboards |
+| MS Riesgos · MS Notificaciones | ⏳ andamiaje (solo construyen y arrancan) |
+
+El diseño y los contratos pendientes de acordar con el equipo (mensajes,
+topología RabbitMQ, esquema de Wiremock, nombres OTel) están en
+`backend/DESIGN.md`.
 
 ## Estructura del repositorio
 
 ```
 .
-├── README.md
 └── backend/
-    ├── README.md                 # detalle operativo del backend
-    ├── docker-compose.yml        # orquesta los 6 servicios
-    ├── build-base.sh             # construye la imagen base y levanta el stack
-    ├── .env.example              # plantilla de configuración
+    ├── README.md               # detalle operativo
+    ├── DESIGN.md               # decisiones de diseño y contratos
+    ├── docker-compose.yml      # 6 servicios core + 4 del perfil 'experimento'
+    ├── build-base.sh / .ps1    # construye la imagen base y levanta el stack
+    ├── .env.example
     │
-    ├── base-image/               # imagen general Flask/Python (solventa/flask-base)
-    ├── redis/                    # imagen Redis (caché de datos externos)
+    ├── base-image/             # imagen general Flask/Python (solventa/flask-base)
+    ├── redis/                  # imagen Redis + redis.conf + entrypoint (seed automático)
     │
-    ├── ms-riesgos/               # MS Riesgos — punto de entrada REST
-    ├── ms-perfil-riesgo/         # MS PerfilRiesgo — cálculo + tácticas de disponibilidad
-    ├── ms-notificaciones/        # MS Notificaciones — entrega del resultado
+    ├── ms-perfil-riesgo/       # cálculo + tácticas de disponibilidad (implementado)
+    ├── ms-riesgos/             # punto de entrada REST (andamiaje)
+    ├── ms-notificaciones/      # entrega del resultado (andamiaje)
     │
-    ├── rabbitmq/                 # broker de mensajería (config propia, pendiente)
-    ├── wiremock/                 # simulación de Open Data / Open Finance (pendiente)
-    └── observabilidad/           # OpenTelemetry + Grafana (pendiente)
+    ├── wiremock/mappings/      # Open Data / Open Finance simulados por customer_id
+    ├── observabilidad/         # otel-collector.yaml, prometheus.yml, grafana/
+    └── experimento/            # locustfile.py
 ```
-
-Cada microservicio sigue el mismo layout (referencia: `backend/ms-perfil-riesgo/`):
-
-| Carpeta / archivo | Rol |
-|---|---|
-| `Dockerfile` | imagen del servicio; `FROM solventa/flask-base` |
-| `requirements.txt` | dependencias propias sobre la imagen base |
-| `run.sh` | arranque (API gunicorn; worker Celery cuando haya lógica) |
-| `app.py` | app Flask + `/health` |
-| `config.py` | configuración desde variables de entorno |
-| `extensiones.py` | `db`, `celery_app` |
-| `modelos/` | modelos SQLAlchemy |
-| `vistas/` | recursos Flask-RESTful |
-| `logica/` | reglas de negocio |
-| `tareas/` | tareas Celery (productores/consumidores del broker) |
-| `tests/` | pruebas |
 
 ## Stack
 
-- Python 3.12 · Flask · Flask-RESTful · SQLAlchemy · Celery
+- Python 3.12 · Flask · Flask-RESTful · Celery · **tenacity** (retry) · **OpenTelemetry**
 - RabbitMQ (broker AMQP) · Redis (caché) · Wiremock (fuentes externas simuladas)
+- OpenTelemetry Collector · Prometheus · Grafana · Locust (perfil `experimento`)
 - Docker + Docker Compose
 
 Las versiones de Flask / SQLAlchemy / marshmallow están alineadas con el
@@ -56,53 +58,65 @@ repositorio de referencia `MISW4201-202614-Backend-Grupo08`.
 
 ## Ejecución
 
-Requisitos: Docker Desktop en ejecución con Compose v2 (`docker compose version`).
+Requisitos: Docker Desktop con Compose v2 (`docker compose version`).
+
+```powershell
+cd backend
+./build-base.ps1        # PowerShell (Windows)
+```
 
 ```sh
 cd backend
-sh build-base.sh
+sh build-base.sh        # Git Bash / Linux / macOS
 ```
 
-`build-base.sh`:
+El script crea `.env` desde `.env.example`, construye `solventa/flask-base`
+(paso previo, no es un servicio) y levanta el stack.
 
-1. crea `.env` a partir de `.env.example` si no existe,
-2. construye la imagen base `solventa/flask-base` (paso previo obligatorio; no es
-   un servicio de Compose),
-3. levanta el stack con `docker compose up -d --build` y muestra el estado.
+### Modo experimento
 
-### Servicios
+```sh
+docker compose --profile experimento up
+```
 
-| Servicio | URL | Descripción |
-|---|---|---|
-| ms-riesgos | http://localhost:5001 | punto de entrada REST |
-| ms-perfil-riesgo | http://localhost:5002 | cálculo del perfil de riesgo |
-| ms-notificaciones | http://localhost:5003 | entrega del resultado |
-| RabbitMQ | http://localhost:15672 | consola de administración (`guest` / `guest`) |
-| Redis | `localhost:6379` | caché de datos externos |
-| Wiremock | http://localhost:8080 | Open Data / Open Finance simulados |
+Añade `otel-collector`, `prometheus`, `grafana` (`:3000`) y `locust` (`:8089`).
+Para emitir métricas, en `.env`: `OTEL_SDK_DISABLED=false`,
+`OTEL_TRACES_EXPORTER=otlp`, `OTEL_METRICS_EXPORTER=otlp`.
+
+El caché de Redis lo precarga la propia imagen `solventa/redis` al arrancar
+(ejecuta `redis/seed/profiles.redis`); no hay servicio de seed aparte.
 
 ### Verificación
 
 ```sh
-curl http://localhost:5001/health
-curl http://localhost:5002/health
-curl http://localhost:5003/health
-```
+# todos los contenedores en 'running'
+docker compose ps
 
-Cada uno responde `{"servicio": "...", "estado": "ok"}`.
+# el worker de MS PerfilRiesgo llegó a 'ready'
+docker compose logs ms-perfil-riesgo | grep "celery@.* ready"
+
+# pruebas unitarias de MS PerfilRiesgo
+docker compose exec ms-perfil-riesgo sh -c \
+  "pip install -q -r requirements-dev.txt && python -m pytest -q tests"
+```
 
 ### Detener
 
 ```sh
-cd backend
-docker compose down
+docker compose down                       # o  --profile experimento down -v
 ```
 
-## Estado actual
+## Servicios
 
-Entrega de **estructura base**: los servicios construyen, arrancan y responden su
-`/health`. Todavía **no** hay lógica de negocio ni implementación de las tácticas
-ASR1 / ASR2 / ASR3.
+| Servicio | Puerto(s) | Descripción |
+|---|---|---|
+| `ms-riesgos` | 5001 | punto de entrada REST (andamiaje, sin endpoints) |
+| `ms-perfil-riesgo` | 5002 | evaluación del perfil + ASR1/ASR2/ASR3 (worker + `GET /profiles/<id>` → 501) |
+| `ms-notificaciones` | 5003 | entrega del resultado (andamiaje, sin endpoints) |
+| `rabbitmq` | 5672 / 15672 | broker AMQP (consola: `guest` / `guest`) |
+| `redis` | 6379 | caché de respaldo (`noeviction`, efímero) |
+| `wiremock` | 8080 | Open Data / Open Finance simulados |
+| `otel-collector` / `prometheus` / `grafana` / `locust` | 4318 / 9090 / 3000 / 8089 | perfil `experimento` |
 
 ## Flujo de trabajo
 

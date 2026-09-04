@@ -6,3 +6,5 @@ __pycache__/
 # aquí 'rabbitmq/' es código fuente de la imagen del broker.
 !rabbitmq/
 
+# Propuesta de diseño: se mantiene local, sin versionar (por ahora).
+DESIGN.md

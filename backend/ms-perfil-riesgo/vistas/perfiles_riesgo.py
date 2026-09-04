@@ -2,12 +2,8 @@
 from flask_restful import Resource
 
 
-class SaludRecurso(Resource):
-    def get(self):
-        return {"servicio": "ms-perfil-riesgo", "estado": "ok"}
-
-
-class PerfilRiesgoRecurso(Resource):
-    def get(self, cliente_id):
-        # TODO: devolver el último perfil de riesgo calculado del cliente.
-        return {"cliente_id": cliente_id, "perfil": None}, 501
+class ProfileResource(Resource):
+    def get(self, customer_id):
+        # Sin persistencia local en el experimento: el perfil vive en Redis y se
+        # publica al broker. Este endpoint queda fuera de alcance.
+        return {"customer_id": customer_id, "profile": None}, 501

@@ -1,0 +1,67 @@
+{
+  "mappings": [
+    {
+      "priority": 1,
+      "request": { "method": "GET", "urlPath": "/open-finance/customers/C001" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 100,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "C001", "financial_risk": 12, "monthly_income": 4200000, "debt_ratio": 0.21, "delinquencies_12m": 0, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" }
+      }
+    },
+
+    {
+      "priority": 1,
+      "scenarioName": "open-finance-C002",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "recovered",
+      "request": { "method": "GET", "urlPath": "/open-finance/customers/C002" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 1500,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "C002", "financial_risk": 58, "monthly_income": 2600000, "debt_ratio": 0.44, "delinquencies_12m": 1, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" }
+      }
+    },
+    {
+      "priority": 1,
+      "scenarioName": "open-finance-C002",
+      "requiredScenarioState": "recovered",
+      "request": { "method": "GET", "urlPath": "/open-finance/customers/C002" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 80,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "C002", "financial_risk": 58, "monthly_income": 2600000, "debt_ratio": 0.44, "delinquencies_12m": 1, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" }
+      }
+    },
+
+    { "priority": 1, "request": { "method": "GET", "urlPath": "/open-finance/customers/C003" }, "response": { "status": 503 } },
+    { "priority": 1, "request": { "method": "GET", "urlPath": "/open-finance/customers/C004" }, "response": { "status": 503 } },
+    { "priority": 1, "request": { "method": "GET", "urlPath": "/open-finance/customers/C006" }, "response": { "status": 503 } },
+
+    {
+      "priority": 1,
+      "request": { "method": "GET", "urlPath": "/open-finance/customers/C005" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 90,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "C005", "monthly_income": 1800000, "debt_ratio": 0.7, "delinquencies_12m": 3, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "2.0" }
+      }
+    },
+
+    {
+      "priority": 10,
+      "request": { "method": "GET", "urlPathPattern": "/open-finance/customers/.+" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 100,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "{{request.pathSegments.[2]}}", "financial_risk": 30, "monthly_income": 3000000, "debt_ratio": 0.3, "delinquencies_12m": 0, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" },
+        "transformers": ["response-template"]
+      }
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 """Punto de entrada HTTP de MS Riesgos.
 
+<<<<<<< HEAD
 Expone el health-check y el endpoint de evaluación para publicar la solicitud
 al broker con un correlation ID.
 """
@@ -12,6 +13,14 @@ from flask_restful import Api, Resource
 from config import Config
 from tareas.publicacion import publicar_solicitud
 from vistas.salud import SaludRecurso
+=======
+Sin endpoints por ahora: el servicio solo construye y arranca. La recepción de
+solicitudes y la publicación al broker se implementarán aparte.
+"""
+from flask import Flask
+
+from config import Config
+>>>>>>> develop
 
 
 class RiesgosRecurso(Resource):
@@ -52,10 +61,13 @@ def crear_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+<<<<<<< HEAD
     api = Api(app)
     api.add_resource(SaludRecurso, "/health")
     api.add_resource(RiesgosRecurso, "/riesgos/evaluar")
 
+=======
+>>>>>>> develop
     return app
 
 

@@ -1,0 +1,67 @@
+{
+  "mappings": [
+    {
+      "priority": 1,
+      "request": { "method": "GET", "urlPath": "/open-data/customers/C001" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 100,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "C001", "data_risk": 18, "negative_reports": 0, "history_length_months": 84, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" }
+      }
+    },
+
+    {
+      "priority": 1,
+      "scenarioName": "open-data-C002",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "recovered",
+      "request": { "method": "GET", "urlPath": "/open-data/customers/C002" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 1500,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "C002", "data_risk": 40, "negative_reports": 1, "history_length_months": 40, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" }
+      }
+    },
+    {
+      "priority": 1,
+      "scenarioName": "open-data-C002",
+      "requiredScenarioState": "recovered",
+      "request": { "method": "GET", "urlPath": "/open-data/customers/C002" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 80,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "C002", "data_risk": 40, "negative_reports": 1, "history_length_months": 40, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" }
+      }
+    },
+
+    { "priority": 1, "request": { "method": "GET", "urlPath": "/open-data/customers/C003" }, "response": { "status": 503 } },
+    { "priority": 1, "request": { "method": "GET", "urlPath": "/open-data/customers/C004" }, "response": { "status": 503 } },
+    { "priority": 1, "request": { "method": "GET", "urlPath": "/open-data/customers/C006" }, "response": { "status": 503 } },
+
+    {
+      "priority": 1,
+      "request": { "method": "GET", "urlPath": "/open-data/customers/C005" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 90,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "C005", "data_risk": "N/A", "negative_reports": 0, "history_length_months": 10, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "2.0" }
+      }
+    },
+
+    {
+      "priority": 10,
+      "request": { "method": "GET", "urlPathPattern": "/open-data/customers/.+" },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 100,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "customer_id": "{{request.pathSegments.[2]}}", "data_risk": 25, "negative_reports": 0, "history_length_months": 60, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" },
+        "transformers": ["response-template"]
+      }
+    }
+  ]
+}
