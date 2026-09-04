@@ -1,0 +1,314 @@
+{
+  "uid": "solventa-experimento",
+  "title": "Solventa - Experimento de disponibilidad (PerfilRiesgo)",
+  "description": "Resumen del experimento + un panel por ASR (1: deteccion <700ms, 2: cache Redis <100ms, 3: retry <=5000ms/<=3 intentos) + latencia end-to-end. Metricas emitidas por ms-perfil-riesgo (telemetria.py) via OTLP -> otel-collector -> Prometheus.",
+  "tags": ["solventa", "eda", "disponibilidad", "perfil-riesgo"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    { "id": 100, "type": "row", "title": "Resumen del experimento", "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 } },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Tasa de exito global",
+      "description": "100 * sum(status=OK) / sum(total) -- criterio general de exito del experimento",
+      "gridPos": { "x": 0, "y": 1, "w": 12, "h": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "green", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "textMode": "auto" },
+      "targets": [
+        {
+          "expr": "100 * sum(solventa_profile_evaluation_total{status=\"OK\"}) / sum(solventa_profile_evaluation_total)",
+          "legendFormat": "exito"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Errores no controlados hacia el analista (DEGRADED_NO_FALLBACK)",
+      "description": "sum(status=DEGRADED_NO_FALLBACK) -- retry agotado Y sin respaldo en cache. DEBE permanecer en 0 para que el experimento se considere exitoso",
+      "gridPos": { "x": 12, "y": 1, "w": 12, "h": 5 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "textMode": "auto" },
+      "targets": [
+        {
+          "expr": "sum(solventa_profile_evaluation_total{status=\"DEGRADED_NO_FALLBACK\"})",
+          "legendFormat": "errores"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "id": 3,
+      "type": "bargauge",
+      "title": "Resultado por status / source",
+      "description": "sum by (status, source) (solventa_profile_evaluation_total) -- source: LIVE | RETRY | CACHE",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "expr": "sum by (status, source) (solventa_profile_evaluation_total)",
+          "legendFormat": "{{status}} / {{source}}"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Tasa de resultados en el tiempo",
+      "description": "sum by (status) (rate(solventa_profile_evaluation_total[1m]))",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(solventa_profile_evaluation_total[1m]))",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+
+    { "id": 101, "type": "row", "title": "ASR1 - Exception Detection (< 700 ms)", "gridPos": { "x": 0, "y": 14, "w": 24, "h": 1 } },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "P95 tiempo de deteccion de fallo, por fuente externa",
+      "description": "histogram_quantile(0.95, ...solventa_profile_detection_ms_milliseconds_bucket). Umbral ASR1 = 700ms",
+      "gridPos": { "x": 0, "y": 15, "w": 16, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 700 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, source_system) (rate(solventa_profile_detection_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "{{source_system}}"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "% detecciones que cumplen ASR1 (<=700ms)",
+      "description": "solventa_profile_asr1_within_threshold_total{pass=true} / total -- senal directa de cumplimiento, no depende de los buckets del histograma",
+      "gridPos": { "x": 16, "y": 15, "w": 8, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 99 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "textMode": "auto" },
+      "targets": [
+        {
+          "expr": "100 * sum(solventa_profile_asr1_within_threshold_total{pass=\"true\"}) / sum(solventa_profile_asr1_within_threshold_total)"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+
+    { "id": 102, "type": "row", "title": "ASR2 - Exception Handling via cache Redis (< 100 ms)", "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 } },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "P95 tiempo de respuesta del cache Redis",
+      "description": "histogram_quantile(0.95, ...solventa_profile_cache_ms_milliseconds_bucket). Umbral ASR2 = 100ms",
+      "gridPos": { "x": 0, "y": 24, "w": 16, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 100 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(solventa_profile_cache_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "p95 cache"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "% consultas a cache que cumplen ASR2 (<=100ms)",
+      "gridPos": { "x": 16, "y": 24, "w": 8, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 99 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "textMode": "auto" },
+      "targets": [
+        {
+          "expr": "100 * sum(solventa_profile_asr2_within_threshold_total{pass=\"true\"}) / sum(solventa_profile_asr2_within_threshold_total)"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Tasa de cache hit",
+      "description": "solventa_profile_cache_hit_total{hit=true} / total -- proporcion de consultas al cache que encontraron respaldo",
+      "gridPos": { "x": 16, "y": 28, "w": 8, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 50 }, { "color": "green", "value": 90 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "textMode": "auto" },
+      "targets": [
+        {
+          "expr": "100 * sum(solventa_profile_cache_hit_total{hit=\"true\"}) / sum(solventa_profile_cache_hit_total)"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+
+    { "id": 103, "type": "row", "title": "ASR3 - Retry (<=3 intentos, backoff exponencial, <=5s totales)", "gridPos": { "x": 0, "y": 32, "w": 24, "h": 1 } },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "P95 duracion total de reintentos, por fuente externa",
+      "description": "histogram_quantile(0.95, ...solventa_profile_retry_ms_milliseconds_bucket). Umbral ASR3 = 5000ms. Solo hay muestras cuando hubo mas de un intento.",
+      "gridPos": { "x": 0, "y": 33, "w": 16, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 5000 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, source_system) (rate(solventa_profile_retry_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "{{source_system}}"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Promedio de intentos por reintento (PerfilRiesgo)",
+      "description": "sum(rate(solventa_profile_retry_attempts_sum[5m])) / sum(rate(solventa_profile_retry_attempts_count[5m])) -- debe ser <= 3",
+      "gridPos": { "x": 16, "y": 33, "w": 8, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 3 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "textMode": "auto" },
+      "targets": [
+        {
+          "expr": "sum(rate(solventa_profile_retry_attempts_sum[5m])) / sum(rate(solventa_profile_retry_attempts_count[5m]))"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "% ventanas de retry que cumplen ASR3 (<=5000ms)",
+      "gridPos": { "x": 16, "y": 37, "w": 8, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 80 }, { "color": "green", "value": 99 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "textMode": "auto" },
+      "targets": [
+        {
+          "expr": "100 * sum(solventa_profile_asr3_within_budget_total{pass=\"true\"}) / sum(solventa_profile_asr3_within_budget_total)"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    },
+
+    { "id": 104, "type": "row", "title": "Latencia end-to-end del flujo de evaluacion", "gridPos": { "x": 0, "y": 41, "w": 24, "h": 1 } },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "P50 / P95 latencia end-to-end de evaluacion de perfil de riesgo",
+      "description": "histogram_quantile(...solventa_profile_evaluation_ms_milliseconds_bucket) -- desde que se consume el mensaje del broker hasta que se publica el resultado",
+      "gridPos": { "x": 0, "y": 42, "w": 24, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(solventa_profile_evaluation_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(solventa_profile_evaluation_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "datasource": { "type": "prometheus", "uid": "prometheus" }
+    }
+  ]
+}

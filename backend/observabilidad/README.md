@@ -13,8 +13,8 @@ Se levanta con `docker compose --profile experimento up`. Para que los MS
 
 - `otel-collector.yaml` — receiver OTLP + exporters `debug` y `prometheus`.
 - `prometheus.yml` — scrapea `otel-collector:9464` cada 5 s.
-- `grafana/provisioning/datasources/` — datasource Prometheus (anónimo, admin).
-- `grafana/provisioning/dashboards/` — **pendiente**: dashboards por ASR.
+- `grafana/provisioning/datasources/` — datasource Prometheus (uid fijo `prometheus`, anónimo, admin).
+- `grafana/provisioning/dashboards/` — `solventa-experimento.json`: resumen + un row por ASR.
 
 ## Métricas que expone MS PerfilRiesgo (DESIGN.md §2.4)
 
@@ -30,5 +30,6 @@ Se levanta con `docker compose --profile experimento up`. Para que los MS
 
 ## Pendiente
 
-- Dashboards de Grafana por ASR (umbral + p95/p99 + tasa de cumplimiento).
-- Ajustar buckets de histograma con una `View` si se necesita un límite exacto en 700 ms.
+- Ajustar buckets de histograma con una `View` si se necesita un límite exacto
+  en 700 ms para el p95 (hoy el % de cumplimiento ya es exacto vía los
+  contadores `asr{1,2,3}_*_total`, que no dependen del bucket).
