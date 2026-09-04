@@ -4,21 +4,17 @@
 #
 # Modo normal:      docker compose up
 # Modo experimento: docker compose --profile experimento up
-#   (añade redis-seed, otel-collector, prometheus, grafana y locust)
+#   (añade otel-collector, prometheus, grafana y locust)
 #   Para emitir métricas: OTEL_SDK_DISABLED=false en .env
+#
+# El caché de Redis se precarga solo: la imagen solventa/redis ejecuta el seed
+# de backend/redis/seed/profiles.redis al arrancar el contenedor.
 
 name: solventa-backend
 
 x-ms-common: &ms-common
   env_file: .env
   restart: "no"        # si un servicio falla, que quede visible, no en bucle
-
-x-ms-healthcheck: &ms-healthcheck
-  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
-  interval: 10s
-  timeout: 5s
-  retries: 10
-  start_period: 15s
 
 x-infra-limits: &infra-limits
   resources:
@@ -42,14 +38,10 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
 
   redis:
-    # Caché de datos externos de MS PerfilRiesgo (ASR2).
+    # Caché de datos externos de MS PerfilRiesgo (ASR2). La imagen precarga el
+    # seed de perfiles de prueba (backend/redis/seed) al arrancar el contenedor.
     build: ./redis
     image: solventa/redis:latest
     ports:
@@ -59,24 +51,6 @@ services:
         limits:
           cpus: "0.5"
           memory: 192M
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  redis-seed:
-    # Prepobla el caché con los perfiles de prueba (backend/redis/seed).
-    # Idempotente: se re-ejecuta en cada 'docker compose --profile experimento up'.
-    image: redis:7-alpine
-    profiles: ["experimento"]
-    restart: "no"
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./redis/seed:/seed:ro
-    entrypoint: ["sh", "-c", "redis-cli -h redis < /seed/profiles.redis && echo 'redis-seed OK'"]
 
   wiremock:
     # Simula Open Data / Open Finance; el escenario se elige por customer_id.
@@ -154,9 +128,7 @@ services:
       - "5001:5000"
     deploy: *infra-limits
     depends_on:
-      rabbitmq:
-        condition: service_healthy
-    healthcheck: *ms-healthcheck
+      - rabbitmq
 
   ms-perfil-riesgo:
     <<: *ms-common
@@ -172,13 +144,9 @@ services:
           cpus: "1.0"
           memory: 512M
     depends_on:
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      wiremock:
-        condition: service_started
-    healthcheck: *ms-healthcheck
+      - rabbitmq
+      - redis
+      - wiremock
 
   ms-notificaciones:
     <<: *ms-common
@@ -190,6 +158,4 @@ services:
       - "5003:5000"
     deploy: *infra-limits
     depends_on:
-      rabbitmq:
-        condition: service_healthy
-    healthcheck: *ms-healthcheck
+      - rabbitmq

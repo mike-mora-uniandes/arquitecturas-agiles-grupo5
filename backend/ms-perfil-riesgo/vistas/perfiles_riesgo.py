@@ -2,11 +2,6 @@
 from flask_restful import Resource
 
 
-class HealthResource(Resource):
-    def get(self):
-        return {"service": "ms-perfil-riesgo", "status": "ok"}
-
-
 class ProfileResource(Resource):
     def get(self, customer_id):
         # Sin persistencia local en el experimento: el perfil vive en Redis y se
