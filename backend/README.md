@@ -74,7 +74,6 @@ Añade `redis-seed` (repuebla el caché), `otel-collector`, `prometheus`,
 
 ## Pendiente
 
-- Dashboards de Grafana por ASR (hay datasource + provider, faltan los `.json`).
 - Implementación de `ms-riesgos` (endpoint REST → publica `perfil.evaluate_profile`)
   y `ms-notificaciones` (consume `profile.result.q`); ajustar `experimento/locustfile.py`.
 - Confirmar con el equipo el contrato propuesto (mensajes, topología RabbitMQ,
