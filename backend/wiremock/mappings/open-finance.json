@@ -13,25 +13,10 @@
 
     {
       "priority": 1,
-      "scenarioName": "open-finance-C002",
-      "requiredScenarioState": "Started",
-      "newScenarioState": "recovered",
       "request": { "method": "GET", "urlPath": "/open-finance/customers/C002" },
       "response": {
         "status": 200,
-        "fixedDelayMilliseconds": 1500,
-        "headers": { "Content-Type": "application/json" },
-        "jsonBody": { "customer_id": "C002", "financial_risk": 58, "monthly_income": 2600000, "debt_ratio": 0.44, "delinquencies_12m": 1, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" }
-      }
-    },
-    {
-      "priority": 1,
-      "scenarioName": "open-finance-C002",
-      "requiredScenarioState": "recovered",
-      "request": { "method": "GET", "urlPath": "/open-finance/customers/C002" },
-      "response": {
-        "status": 200,
-        "fixedDelayMilliseconds": 80,
+        "delayDistribution": { "type": "lognormal", "median": 300, "sigma": 0.6 },
         "headers": { "Content-Type": "application/json" },
         "jsonBody": { "customer_id": "C002", "financial_risk": 58, "monthly_income": 2600000, "debt_ratio": 0.44, "delinquencies_12m": 1, "generated_at": "2026-09-03T10:00:00Z", "contract_version": "1.0" }
       }
