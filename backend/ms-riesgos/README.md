@@ -1,12 +1,15 @@
 # ms-riesgos
 
-En esta rama solo está el andamiaje: el servicio construye y arranca. No expone
-endpoints ni tiene lógica de negocio.
+Microservicio HTTP que recibe solicitudes de evaluación de riesgo y las publica
+asíncronamente en RabbitMQ.
 
-Pendiente:
-- Endpoint REST que recibe la solicitud del analista y genera un correlation ID.
-- Publicación asíncrona de `SolicitudEvaluacionPerfil` a RabbitMQ (`tareas/`).
-- Imagen Wiremock (`../wiremock/`).
+## Endpoint disponible
 
-Espeja el layout de `../ms-perfil-riesgo/` (añade `modelos/` solo si necesitas
-persistencia).
+- POST /riesgos/evaluar
+
+## Comportamiento
+
+- Valida que el payload sea JSON y que incluya cliente_id.
+- Genera un correlation_id para trazabilidad de la solicitud.
+- Publica la solicitud en la cola profile_evaluation_request.
+- No expone endpoint de health check.
