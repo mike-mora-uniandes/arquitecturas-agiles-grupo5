@@ -17,7 +17,8 @@ Open Finance.
 | **MS PerfilRiesgo — tácticas ASR1 / ASR2 / ASR3** | ✅ implementadas y verificadas E2E |
 | Wiremock (mappings por `customer_id`) | ✅ |
 | Observabilidad (OTel Collector + Prometheus + Grafana) | ✅ pipeline; faltan dashboards |
-| MS Riesgos · MS Notificaciones | ⏳ andamiaje (solo construyen y arrancan) |
+| **MS Notificaciones — consumer del resultado** | ✅ consume y loguea (Celery); notificación real pendiente |
+| MS Riesgos | ⏳ andamiaje (solo construye y arranca, sin endpoints) |
 
 El diseño y los contratos pendientes de acordar con el equipo (mensajes,
 topología RabbitMQ, esquema de Wiremock, nombres OTel) están en
@@ -39,7 +40,7 @@ topología RabbitMQ, esquema de Wiremock, nombres OTel) están en
     │
     ├── ms-perfil-riesgo/       # cálculo + tácticas de disponibilidad (implementado)
     ├── ms-riesgos/             # punto de entrada REST (andamiaje)
-    ├── ms-notificaciones/      # entrega del resultado (andamiaje)
+    ├── ms-notificaciones/      # consume y loguea el resultado (Celery)
     │
     ├── wiremock/mappings/      # Open Data / Open Finance simulados por customer_id
     ├── observabilidad/         # otel-collector.yaml, prometheus.yml, grafana/
@@ -112,7 +113,7 @@ docker compose down                       # o  --profile experimento down -v
 |---|---|---|
 | `ms-riesgos` | 5001 | punto de entrada REST (andamiaje, sin endpoints) |
 | `ms-perfil-riesgo` | 5002 | evaluación del perfil + ASR1/ASR2/ASR3 (worker + `GET /profiles/<id>` → 501) |
-| `ms-notificaciones` | 5003 | entrega del resultado (andamiaje, sin endpoints) |
+| `ms-notificaciones` | 5003 | consume `profile.result.q` y loguea el resultado (Celery) |
 | `rabbitmq` | 5672 / 15672 | broker AMQP (consola: `guest` / `guest`) |
 | `redis` | 6379 | caché de respaldo (`noeviction`, efímero) |
 | `wiremock` | 8080 | Open Data / Open Finance simulados |
