@@ -14,7 +14,7 @@
       "id": 1,
       "type": "stat",
       "title": "Tasa de exito global",
-      "description": "100 * sum(status=OK) / sum(total) -- criterio general de exito del experimento",
+      "description": "100 * sum(status=OK [LIVE+RETRY] + status=DEGRADED,source=CACHE) / sum(total) -- exito = respuesta correcta (en vivo o con reintento) o degradada pero servida desde cache (ASR2); solo DEGRADED_NO_FALLBACK cuenta como fallo",
       "gridPos": { "x": 0, "y": 1, "w": 12, "h": 5 },
       "fieldConfig": {
         "defaults": {
@@ -35,7 +35,7 @@
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "textMode": "auto" },
       "targets": [
         {
-          "expr": "100 * sum(solventa_profile_evaluation_total{status=\"OK\"}) / sum(solventa_profile_evaluation_total)",
+          "expr": "100 * (sum(solventa_profile_evaluation_total{status=\"OK\"}) + sum(solventa_profile_evaluation_total{status=\"DEGRADED\", source=\"CACHE\"})) / sum(solventa_profile_evaluation_total)",
           "legendFormat": "exito"
         }
       ],
