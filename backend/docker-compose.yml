@@ -4,7 +4,7 @@
 #
 # Modo normal:      docker compose up
 # Modo experimento: docker compose --profile experimento up
-#   (añade otel-collector, prometheus, grafana y locust)
+#   (añade otel-collector, prometheus y grafana; Locust queda activo también en el modo normal)
 #   Para emitir métricas: OTEL_SDK_DISABLED=false en .env
 #
 # El caché de Redis se precarga solo: la imagen solventa/redis ejecuta el seed
@@ -106,7 +106,6 @@ services:
 
   locust:
     image: locustio/locust:2.31.5
-    profiles: ["experimento"]
     volumes:
       - ./experimento:/mnt/locust:ro
     command: ["-f", "/mnt/locust/locustfile.py", "--host", "http://ms-riesgos:5000"]
