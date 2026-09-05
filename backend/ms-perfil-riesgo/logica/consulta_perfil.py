@@ -14,13 +14,10 @@ from tenacity import (
     wait_random_exponential,
 )
 
+import telemetria
 from config import Config
 from logica import fuentes_externas as fx
 from logica.deteccion_excepciones import FalloReintentable, RespuestaAnomala
-from telemetria import asr3_within_budget_total
-from telemetria import detection_ms as m_detection_ms
-from telemetria import retry_attempts as m_retry_attempts
-from telemetria import retry_ms as m_retry_ms
 from telemetria import tracer
 
 
@@ -57,7 +54,7 @@ def _consultar_fuente(system: str, customer_id: str, deadline: float) -> Resulta
                 if estado["first_detection"] is None:
                     estado["first_detection"] = exc.clase
                     estado["detection_ms"] = ms
-                    m_detection_ms.record(
+                    telemetria.detection_ms.record(
                         ms, {"source_system": system, "result": exc.clase}
                     )
                 raise
@@ -85,9 +82,11 @@ def _consultar_fuente(system: str, customer_id: str, deadline: float) -> Resulta
         rsp.set_attribute("solventa.retry.ms", retry_total)
         rsp.set_attribute("solventa.retry.exhausted", not ok)
         if estado["attempts"] > 1:
-            m_retry_ms.record(retry_total, {"source_system": system})
-            m_retry_attempts.record(estado["attempts"], {"source_system": system})
-            asr3_within_budget_total.add(
+            telemetria.retry_ms.record(retry_total, {"source_system": system})
+            telemetria.retry_attempts.record(
+                estado["attempts"], {"source_system": system}
+            )
+            telemetria.asr3_within_budget_total.add(
                 1, {"pass": str(retry_total <= Config.RETRY_BUDGET_MS).lower()}
             )
 

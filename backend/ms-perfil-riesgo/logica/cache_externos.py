@@ -4,10 +4,8 @@ import time
 from datetime import datetime, timezone
 
 import extensiones
+import telemetria
 from config import Config
-from telemetria import asr2_within_threshold_total
-from telemetria import cache_hit_total
-from telemetria import cache_ms as m_cache_ms
 from telemetria import tracer
 
 
@@ -34,9 +32,9 @@ def leer(customer_id: str) -> dict | None:
 
         sp.set_attribute("solventa.cache.hit", hit)
         sp.set_attribute("solventa.cache.ms", ms)
-        m_cache_ms.record(ms)
-        cache_hit_total.add(1, {"hit": str(hit).lower()})
-        asr2_within_threshold_total.add(
+        telemetria.cache_ms.record(ms)
+        telemetria.cache_hit_total.add(1, {"hit": str(hit).lower()})
+        telemetria.asr2_within_threshold_total.add(
             1, {"pass": str(ms < Config.CACHE_ASR2_THRESHOLD_MS).lower()}
         )
 
