@@ -6,6 +6,7 @@ import time
 from celery.exceptions import Reject
 
 import extensiones
+import telemetria
 from config import Config
 from extensiones import celery_app
 from logica import calculo_perfil, cache_externos, manejo_excepciones
@@ -20,9 +21,6 @@ from mensajes import (
     parse_request,
 )
 from tareas.publicador import publicar_resultado
-from telemetria import asr1_within_threshold_total
-from telemetria import evaluation_ms as m_eval_ms
-from telemetria import evaluation_total as m_eval_total
 from telemetria import tracer
 
 log = logging.getLogger(__name__)
@@ -63,8 +61,8 @@ def evaluate_profile(self, body):
         )
 
         eval_ms = (time.monotonic() - inicio) * 1000
-        m_eval_ms.record(eval_ms)
-        m_eval_total.add(
+        telemetria.evaluation_ms.record(eval_ms)
+        telemetria.evaluation_total.add(
             1, {"status": resultado["status"], "source": resultado["source"]}
         )
         span.set_attribute("solventa.status", resultado["status"])
@@ -80,7 +78,7 @@ def _evaluar(req: dict) -> dict:
     detecciones = [o.detection_ms for o in (od, ofin) if o.detection_ms is not None]
     if detecciones:
         dentro = min(detecciones) < Config.DETECTION_TIMEOUT_MS
-        asr1_within_threshold_total.add(1, {"pass": str(dentro).lower()})
+        telemetria.asr1_within_threshold_total.add(1, {"pass": str(dentro).lower()})
 
     if od.ok and ofin.ok:
         perfil = calculo_perfil.calcular(od.data, ofin.data)
