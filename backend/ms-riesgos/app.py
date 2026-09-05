@@ -15,23 +15,24 @@ from tareas.publicacion import publicar_solicitud
 
 class RiesgosRecurso(Resource):
     def post(self):
-        # Contrato HTTP del microservicio: el analista envía la evaluación y el
-        # servicio genera un correlation_id para seguir la solicitud completa desde
-        # la entrada REST hasta la publicación en RabbitMQ.
         payload = request.get_json(silent=True) or {}
 
         if not isinstance(payload, dict):
             return {"error": "payload debe ser un JSON válido"}, 400
 
-        cliente_id = payload.get("cliente_id")
-        if not cliente_id:
-            return {"error": "cliente_id es obligatorio"}, 400
+        customer_id = payload.get("customer_id") or payload.get("cliente_id")
+        if not customer_id:
+            return {"error": "customer_id es obligatorio"}, 400
+
+        requested_by = payload.get("requested_by") or payload.get("analista_id")
+        scenario = payload.get("scenario")
 
         correlation_id = str(uuid4())
         solicitud = {
             "correlation_id": correlation_id,
-            "cliente_id": str(cliente_id),
-            "analista_id": payload.get("analista_id"),
+            "customer_id": str(customer_id),
+            "requested_by": requested_by,
+            "scenario": scenario,
             "tipo_evaluacion": payload.get("tipo_evaluacion", "riesgo"),
             "detalles": payload.get("detalles", {}),
             "solicitado_en": datetime.now(timezone.utc).isoformat(),
@@ -41,7 +42,7 @@ class RiesgosRecurso(Resource):
 
         return {
             "correlation_id": correlation_id,
-            "cliente_id": solicitud["cliente_id"],
+            "customer_id": solicitud["customer_id"],
             "estado": "aceptado",
             "mensaje": "Solicitud encolada correctamente",
         }, 202
@@ -52,7 +53,7 @@ def crear_app():
     app.config.from_object(Config)
 
     api = Api(app)
-    api.add_resource(RiesgosRecurso, "/riesgos/evaluar")
+    api.add_resource(RiesgosRecurso, "/evaluations", "/riesgos/evaluar")
 
     return app
 

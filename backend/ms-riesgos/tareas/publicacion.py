@@ -1,39 +1,22 @@
-"""Publicación de la solicitud de evaluación a RabbitMQ.
-
-El message contract del servicio se mantiene en inglés y conserva el
-`correlation_id` para alinear el flujo con `ProfileEvaluationRequest` y
-`ProfileEvaluationResult` del microservicio de perfil de riesgo.
-"""
-import json
-
-import pika
-
+"""Publicación de la solicitud de evaluación al broker Celery/Kombu."""
 from config import Config
+from extensiones import celery_app
 
 
 def publicar_solicitud(solicitud):
-    """Publica la solicitud en RabbitMQ como un `ProfileEvaluationRequest`.
-
-    El payload debe incluir `correlation_id`, `cliente_id` y el resto del
-    contenido de la petición para que el consumidor pueda correlacionar la
-    ejecución completa y responder con el resultado asociado.
-    """
+    """Publica la solicitud en la cola de trabajo del perfil de riesgo."""
     if not isinstance(solicitud, dict):
         raise ValueError("La solicitud debe ser un diccionario JSON")
 
     if not solicitud.get("correlation_id"):
         raise ValueError("La solicitud debe incluir correlation_id")
 
-    parametros = pika.URLParameters(Config.RABBITMQ_URL)
-    conexion = pika.BlockingConnection(parametros)
-    canal = conexion.channel()
-    canal.queue_declare(queue="profile_evaluation_request", durable=True)
-    canal.basic_publish(
-        exchange="",
-        routing_key="profile_evaluation_request",
-        body=json.dumps(solicitud),
-        properties=pika.BasicProperties(delivery_mode=2),
+    celery_app.send_task(
+        "perfil.evaluate_profile",
+        [solicitud],
+        exchange=Config.RABBITMQ_EXCHANGE,
+        routing_key=Config.REQUEST_ROUTING_KEY,
+        retry=True,
     )
-    conexion.close()
 
     return solicitud
