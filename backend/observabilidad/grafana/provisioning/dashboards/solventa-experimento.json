@@ -106,8 +106,8 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "P95 tiempo de deteccion de fallo, por fuente externa",
-      "description": "histogram_quantile(0.95, ...solventa_profile_detection_ms_milliseconds_bucket). Umbral ASR1 = 700ms",
+      "title": "P99 tiempo de deteccion de fallo, por fuente externa",
+      "description": "histogram_quantile(0.99, ...solventa_profile_detection_ms_milliseconds_bucket). Umbral ASR1 = 700ms",
       "gridPos": { "x": 0, "y": 15, "w": 16, "h": 8 },
       "fieldConfig": {
         "defaults": {
@@ -120,8 +120,8 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, source_system) (rate(solventa_profile_detection_ms_milliseconds_bucket[5m])))",
-          "legendFormat": "{{source_system}}"
+          "expr": "histogram_quantile(0.99, sum by (le, source_system) (rate(solventa_profile_detection_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "p99 {{source_system}}"
         }
       ],
       "datasource": { "type": "prometheus", "uid": "prometheus" }
@@ -154,8 +154,8 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "P95 tiempo de respuesta del cache Redis",
-      "description": "histogram_quantile(0.95, ...solventa_profile_cache_ms_milliseconds_bucket). Umbral ASR2 = 100ms",
+      "title": "P99 tiempo de respuesta del cache Redis",
+      "description": "histogram_quantile(0.99, ...solventa_profile_cache_ms_milliseconds_bucket). Umbral ASR2 = 100ms",
       "gridPos": { "x": 0, "y": 24, "w": 16, "h": 8 },
       "fieldConfig": {
         "defaults": {
@@ -168,8 +168,8 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(solventa_profile_cache_ms_milliseconds_bucket[5m])))",
-          "legendFormat": "p95 cache"
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(solventa_profile_cache_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "p99 cache"
         }
       ],
       "datasource": { "type": "prometheus", "uid": "prometheus" }
@@ -224,8 +224,8 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "P95 duracion total de reintentos, por fuente externa",
-      "description": "histogram_quantile(0.95, ...solventa_profile_retry_ms_milliseconds_bucket). Umbral ASR3 = 5000ms. Solo hay muestras cuando hubo mas de un intento.",
+      "title": "P99 duracion total de reintentos, por fuente externa",
+      "description": "histogram_quantile(0.99, ...solventa_profile_retry_ms_milliseconds_bucket). Umbral ASR3 = 5000ms. Solo hay muestras cuando hubo mas de un intento.",
       "gridPos": { "x": 0, "y": 33, "w": 16, "h": 8 },
       "fieldConfig": {
         "defaults": {
@@ -238,7 +238,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, source_system) (rate(solventa_profile_retry_ms_milliseconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, source_system) (rate(solventa_profile_retry_ms_milliseconds_bucket[5m])))",
           "legendFormat": "{{source_system}}"
         }
       ],
@@ -293,7 +293,7 @@
     {
       "id": 13,
       "type": "timeseries",
-      "title": "P50 / P95 latencia end-to-end de evaluacion de perfil de riesgo",
+      "title": "P50 / P99 latencia end-to-end de evaluacion de perfil de riesgo",
       "description": "histogram_quantile(...solventa_profile_evaluation_ms_milliseconds_bucket) -- desde que se consume el mensaje del broker hasta que se publica el resultado",
       "gridPos": { "x": 0, "y": 42, "w": 24, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
@@ -304,8 +304,8 @@
           "legendFormat": "p50"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(solventa_profile_evaluation_ms_milliseconds_bucket[5m])))",
-          "legendFormat": "p95"
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(solventa_profile_evaluation_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "p99"
         }
       ],
       "datasource": { "type": "prometheus", "uid": "prometheus" }
