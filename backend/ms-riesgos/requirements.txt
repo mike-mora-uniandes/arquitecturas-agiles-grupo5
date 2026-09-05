@@ -1,2 +1,3 @@
 # Extras de MS Riesgos sobre la imagen base (solventa/flask-base).
-# Sin dependencias propias por ahora; añádelas aquí.
+# Usa Celery/Kombu para publicar en la cola profile.request.queue.
+celery==5.3.6
