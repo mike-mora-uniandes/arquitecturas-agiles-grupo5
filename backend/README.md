@@ -1,8 +1,9 @@
 # Backend Solventa — microservicios
 
 Backend del experimento de disponibilidad de Solventa. `ms-perfil-riesgo` ya
-implementa las tácticas ASR1/ASR2/ASR3; `ms-riesgos` y `ms-notificaciones` son
-andamiaje (solo construyen y arrancan, sin endpoints).
+implementa las tácticas ASR1/ASR2/ASR3; `ms-notificaciones` ya consume y
+loguea el resultado (Celery); `ms-riesgos` sigue siendo solo andamiaje
+(construye y arranca, sin endpoints).
 
 ## Requisitos
 
@@ -54,7 +55,7 @@ experimento (idempotente, sin servicio aparte).
 |---|---|---|
 | `ms-riesgos` | 5001 | andamiaje (sin endpoints) |
 | `ms-perfil-riesgo` | 5002 | **ASR1/ASR2/ASR3 implementadas** (worker + `GET /profiles/<id>` → 501) |
-| `ms-notificaciones` | 5003 | andamiaje (sin endpoints) |
+| `ms-notificaciones` | 5003 | consume `profile.result.q` y loguea el resultado (Celery); notificación real pendiente |
 | `rabbitmq` | 5672 / 15672 | imagen oficial |
 | `redis` | 6379 | imagen propia, `noeviction`, efímero, seed al arrancar |
 | `wiremock` | 8080 | mappings por `customer_id` (`./wiremock/mappings`) |
@@ -76,7 +77,10 @@ experimento (idempotente, sin servicio aparte).
 
 ## Pendiente
 
-- Implementación de `ms-riesgos` (endpoint REST → publica `perfil.evaluate_profile`)
-  y `ms-notificaciones` (consume `profile.result.q`); ajustar `experimento/locustfile.py`.
+- Implementación de `ms-riesgos` (endpoint REST → publica `perfil.evaluate_profile`);
+  ajustar `experimento/locustfile.py`.
+- `ms-notificaciones`: mecanismo real de notificación al analista de riesgo
+  (hoy solo loguea) y envío a la Dead-Letter Queue tras agotar reintentos —
+  pendientes de confirmar con el equipo.
 - Confirmar con el equipo el contrato propuesto (mensajes, topología RabbitMQ,
   esquema de Wiremock, nombres OTel).
