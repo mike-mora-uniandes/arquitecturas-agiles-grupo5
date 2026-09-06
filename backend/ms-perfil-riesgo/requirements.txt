@@ -1,0 +1,5 @@
+# Extras de MS PerfilRiesgo sobre la imagen base (solventa/flask-base).
+# Cliente de la caché de datos externos (ASR2) e idempotencia.
+redis==5.2.1
+# Reintentos hacia las fuentes externas (ASR3): backoff exponencial + jitter.
+tenacity==9.0.0
