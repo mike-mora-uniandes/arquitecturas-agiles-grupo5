@@ -57,8 +57,8 @@ el punto de sensibilidad del experimento es el perfil que viaja hacia
 ## Variables de entorno (ver `../.env.example`)
 
 `RIESGO_DATABASE_URL`, `INTEGRITY_SECRET`, `RABBITMQ_URL`,
-`RABBITMQ_EXCHANGE`, `EXTRACCION_ROUTING_KEY`, `EXTRACCION_TASK_NAME`,
-`LOG_LEVEL`.
+`RABBITMQ_EXCHANGE`, `EXTRACCION_QUEUE`, `EXTRACCION_ROUTING_KEY`,
+`EXTRACCION_TASK_NAME`, `LOG_LEVEL`.
 
 ## Pruebas
 

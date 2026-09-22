@@ -59,3 +59,11 @@ def test_devuelve_perfil_si_todo_ok(mock_consultar, client):
 
     assert response.status_code == 200
     assert response.get_json()["customer_id"] == "CLI-0007"
+
+
+@patch("vistas.cliente.consultar_perfil_riesgo")
+def test_devuelve_400_si_falta_token_o_customer_id(mock_consultar, client):
+    response = client.post("/perfil-riesgo", json={"customer_id": "CLI-0007"})
+
+    assert response.status_code == 400
+    mock_consultar.assert_not_called()
