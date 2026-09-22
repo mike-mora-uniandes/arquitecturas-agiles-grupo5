@@ -1,0 +1,107 @@
+# Orquestación local del experimento de seguridad (confidencialidad +
+# integridad). Requisito previo: construir la imagen base con
+# sh build-base.sh (equivale a:
+#   docker build -t solventa/security-flask-base:latest ./base-image )
+#
+# Puertos de host distintos a los de backend/ (experimento 1) a propósito,
+# para poder levantar ambos stacks al mismo tiempo sin choques.
+
+name: solventa-seguridad
+
+x-ms-common: &ms-common
+  env_file: .env
+  restart: "no"        # si un servicio falla, que quede visible, no en bucle
+
+services:
+
+  # ----------------------------- Infraestructura -----------------------------
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5673:5672"     # AMQP
+      - "15673:15672"   # consola de administración
+
+  ms-identidad-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: solventa
+      POSTGRES_PASSWORD: solventa
+      POSTGRES_DB: identidad
+    ports:
+      - "5433:5432"
+
+  ms-riesgo-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: solventa
+      POSTGRES_PASSWORD: solventa
+      POSTGRES_DB: perfilriesgo
+    ports:
+      - "5434:5432"
+
+  ms-audit-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: solventa
+      POSTGRES_PASSWORD: solventa
+      POSTGRES_DB: audit
+    ports:
+      - "5435:5432"
+
+  seed:
+    # Puebla ms-identidad-db y ms-riesgo-db con datos dummy (Faker). One-shot.
+    <<: *ms-common
+    build: ./seed
+    depends_on:
+      - ms-identidad-db
+      - ms-riesgo-db
+      - ms-audit-db
+
+  # ----------------------------- Microservicios -----------------------------
+
+  ms-identidad:
+    <<: *ms-common
+    build: ./ms-identidad
+    ports:
+      - "6001:5000"
+    depends_on:
+      - rabbitmq
+      - ms-identidad-db
+      - seed
+
+  ms-cliente:
+    <<: *ms-common
+    build: ./ms-cliente
+    ports:
+      - "6002:5000"
+    depends_on:
+      - ms-identidad
+      - ms-riesgo
+
+  ms-riesgo:
+    <<: *ms-common
+    build: ./ms-riesgo
+    ports:
+      - "6003:5000"
+    depends_on:
+      - rabbitmq
+      - ms-riesgo-db
+      - seed
+
+  ms-audit:
+    <<: *ms-common
+    build: ./ms-audit
+    ports:
+      - "6004:5000"
+    depends_on:
+      - rabbitmq
+      - ms-audit-db
+
+  ms-notificaciones:
+    <<: *ms-common
+    build: ./ms-notificaciones
+    ports:
+      - "6005:5000"
+    depends_on:
+      - rabbitmq
