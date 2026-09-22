@@ -1,0 +1,6 @@
+# Dependencias solo para ejecutar las pruebas (no van en la imagen).
+#   pip install -r requirements-dev.txt
+# SQLAlchemy ya viene en la imagen base; se repite aquí para correr los tests
+# fuera del contenedor (usan SQLite en memoria, sin PostgreSQL ni broker).
+pytest==8.3.3
+SQLAlchemy==2.0.51

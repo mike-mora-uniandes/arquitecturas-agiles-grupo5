@@ -22,10 +22,19 @@ de construcción.
 | Componente | Estado |
 |---|---|
 | Estructura + `docker-compose` + imagen base | ✅ |
-| `ms-identidad` / `ms-cliente` / `ms-riesgo` / `ms-audit` / `ms-notificaciones` | ⏳ andamiaje |
-| `seed/` (datos dummy con Faker) | ⏳ andamiaje |
-| `experimento/` (forjar token, mitmproxy) | ⏳ plantillas sin implementar |
-| Observabilidad (OTel + Prometheus + Grafana) | ⏳ no scaffoldeado — reutilizar el patrón de `../backend/observabilidad/` cuando se llegue a esa tarea |
+| `ms-identidad` (ValidarUsuario + BOLA deliberado) | ✅ |
+| `ms-riesgo` / `ms-cliente` (SolicitarPerfil + integridad) | 🔀 en rama `feature/seguridad-ms-riesgo-ms-cliente` |
+| **`ms-audit`** (clasifica intrusiones, publica incidente) | ✅ consumidores + PostgreSQL + clasificador + métricas |
+| **`ms-notificaciones`** (notifica al analista) | ✅ consume incidente + métrica de reacción |
+| **Observabilidad** (OTel + Prometheus + Grafana) | ✅ pipeline + dashboard por ASR (perfil `experimento`) |
+| `seed/` (datos dummy con Faker) | 🔀 en rama `feature/seguridad-seed-y-experimentos` |
+| `experimento/` (forjar token, mitmproxy) | 🔀 en rama `feature/seguridad-seed-y-experimentos` |
+
+> **Dependencia cruzada pendiente:** para el escenario de **integridad** (ASR2/ASR4),
+> `ms-cliente` debe publicar el evento `IntegridadFallida` al broker cuando el
+> hash del perfil no coincida. El contrato y el snippet están en
+> [`ms-audit/README.md`](ms-audit/README.md#contrato-del-evento-integridadfallida-pendiente-en-ms-cliente).
+> `ms-audit` ya consume ese evento; falta el `send_task` en `ms-cliente`.
 
 ## Decisiones de alcance pendientes de confirmar con el equipo
 
@@ -86,6 +95,8 @@ ambos experimentos al mismo tiempo.
 | `ms-notificaciones` | `6005:5000` | notifica al analista de riesgo |
 | `rabbitmq` | `5673`, `15673` | broker AMQP (consola `guest`/`guest`) |
 | `ms-identidad-db` / `ms-riesgo-db` / `ms-audit-db` | `5433` / `5434` / `5435` | PostgreSQL, uno por servicio |
+| `grafana` / `prometheus` | `3001` / `9091` | solo con `--profile experimento` |
+| `otel-collector` | `4319`, `9465` | OTLP http + `/metrics` (perfil `experimento`) |
 
 ## Puesta en marcha
 
@@ -100,3 +111,30 @@ Faker, que corre una vez y termina).
 
 Detener: `docker compose down` (o `docker compose down -v` para también
 borrar los datos de las 3 bases).
+
+## Ejecutar el experimento con métricas (observabilidad)
+
+Para medir los ASR en Grafana en vivo:
+
+1. Activar la telemetría en `.env`:
+
+   ```
+   OTEL_SDK_DISABLED=false
+   OTEL_TRACES_EXPORTER=otlp
+   OTEL_METRICS_EXPORTER=otlp
+   ```
+
+2. Levantar el stack completo (añade `otel-collector`, `prometheus`, `grafana`):
+
+   ```sh
+   docker compose --profile experimento up -d --build
+   ```
+
+3. Ejecutar los ataques (ver [`experimento/`](experimento/README.md)) y abrir
+   el dashboard **Solventa · Experimento de seguridad** en
+   http://localhost:3001 → detección (ASR1/ASR2) vs. su umbral y notificación
+   (ASR3/ASR4) vs. 5 s, con el `% que cumple` de cada uno.
+
+Evidencia sin Grafana: `docker compose logs -f ms-audit ms-notificaciones`
+muestra las líneas `INTRUSION ...` y `NOTIFICAR ANALISTA ...`, y
+`GET http://localhost:6004/incidentes` lista los incidentes clasificados.
