@@ -18,5 +18,11 @@ class Config:
     EXTRACCION_ROUTING_KEY = os.getenv(
         "EXTRACCION_ROUTING_KEY", "riesgo.extraccion_perfil"
     )
+    # Coincide con el nombre hardcodeado en ms-audit/tareas/consumidores.py —
+    # si se convierte a Config.EXTRACCION_TASK_NAME allá también, deben
+    # seguir coincidiendo.
+    EXTRACCION_TASK_NAME = os.getenv(
+        "EXTRACCION_TASK_NAME", "audit.registrar_extraccion_perfil"
+    )
 
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

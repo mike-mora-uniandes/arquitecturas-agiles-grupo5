@@ -1,22 +1,79 @@
 # ms-riesgo
 
-Andamiaje: el servicio construye y arranca, sin endpoints ni lógica de
-negocio todavía.
+Implementado: `SolicitarPerfil` + `GeneradorIntegridad` + publicación de
+`ReporteExtraccionPerfilRiesgoCliente`. Productor puro (usa Celery como
+cliente, no corre worker — ver `run.sh`).
 
-**Propósito final:** custodiar y entregar el perfil de riesgo del cliente
-(datos sensibles, PII) junto con evidencia verificable de su integridad, y
-dejar registro de cada extracción atendida. Solo accesible por `ms-cliente`,
-nunca directamente desde fuera — es el objetivo del ataque de
-confidencialidad (ASR1) del experimento.
+**Propósito:** custodiar y entregar el perfil de riesgo del cliente (datos
+sensibles, PII) junto con evidencia verificable de su integridad, y dejar
+registro de cada extracción atendida. Solo accesible por `ms-cliente`, nunca
+directamente desde fuera — es el objetivo del ataque de confidencialidad
+(ASR1) del experimento.
 
-**Comportamiento esperado:** recibe de `ms-cliente` la "solicitud de perfil",
-consulta la base de datos `PerfilRiesgo` (PostgreSQL) y responde el perfil de
-riesgo junto con su hash de integridad (`logica/generador_integridad.py`). De
-forma asíncrona publica `ReporteExtraccionPerfilRiesgoCliente` en el Event Bus
-(lo consume `ms-audit`).
+## `GET /perfiles/<customer_id>`
+
+```json
+// Response 200
+{
+  "customer_id": "CLI-0007",
+  "nombre_completo": "Juana Pérez",
+  "documento_identidad": "123456",
+  "puntaje": 80,
+  "categoria": "ALTO",
+  "actualizado_en": "2026-01-01T00:00:00+00:00",
+  "hash_integridad": "<hmac-sha256 hex>"
+}
+
+// Response 404
+{ "error": "perfil 'CLI-9999' no encontrado" }
+```
+
+`hash_integridad` se calcula con `hmac-sha256` sobre el resto del payload
+(orden de llaves normalizado con `json.dumps(sort_keys=True)`) y
+`Config.INTEGRITY_SECRET`. `ms-cliente` (`ValidadorIntegridad`) recalcula el
+mismo hash sobre el payload recibido y lo compara — ver
+`../ms-cliente/logica/validador_integridad.py`.
+
+## Modelo de datos (`logica/modelos.py`)
+
+`perfiles_riesgo(customer_id PK, nombre_completo, documento_identidad,
+puntaje, categoria, actualizado_en)` — poblado por `../seed/`. `puntaje` es
+0-100 con los mismos cortes que
+`backend/ms-perfil-riesgo/logica/calculo_perfil.py` (BAJO <34, MEDIO 34-66,
+ALTO >66), traducidos al español; es un valor dummy, no hay cálculo real de
+riesgo en este experimento.
+
+## Qué publica (`tareas/publicacion.py`)
+
+| | valor |
+|---|---|
+| tarea Celery consumida por | `audit.registrar_extraccion_perfil` (`Config.EXTRACCION_TASK_NAME`) |
+| exchange / routing key | `solventa-seguridad` (topic) / `riesgo.extraccion_perfil` |
+
+Se publica en **cada** extracción atendida (perfil encontrado), sin firma:
+el punto de sensibilidad del experimento es el perfil que viaja hacia
+`ms-cliente`, no este canal interno de auditoría (ver `../README.md`).
+
+## Variables de entorno (ver `../.env.example`)
+
+`RIESGO_DATABASE_URL`, `INTEGRITY_SECRET`, `RABBITMQ_URL`,
+`RABBITMQ_EXCHANGE`, `EXTRACCION_ROUTING_KEY`, `EXTRACCION_TASK_NAME`,
+`LOG_LEVEL`.
+
+## Pruebas
+
+```sh
+cd ms-riesgo
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest tests
+```
+
+Sin BD ni broker reales: `test_vistas_riesgo.py` usa SQLite en memoria,
+`test_publicacion.py` mockea `send_task`.
 
 Pendiente:
-- Modelo de datos `PerfilRiesgo` en PostgreSQL + seed (ver `../seed/`).
-- Endpoint `SolicitarPerfil`.
-- `GeneradorIntegridad`: firma del payload (hashlib/hmac).
-- Publicación de `ReporteExtraccionPerfilRiesgoCliente` al Event Bus.
+- Coordinación con `ms-cliente` para el flujo completo end-to-end (hecho en
+  este mismo PR).
+- Datos reales del seed (`../seed/generar_seed.py:poblar_perfil_riesgo`, a
+  cargo de Lorena) — sin eso, `docker compose up` responde `404` para
+  cualquier `customer_id`.

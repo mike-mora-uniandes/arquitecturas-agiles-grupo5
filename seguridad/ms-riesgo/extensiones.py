@@ -1,7 +1,31 @@
-"""Extensiones compartidas del microservicio: Celery (cliente, solo publica) y BD."""
+"""Extensiones compartidas del microservicio: Celery (cliente, solo publica)
+y BD (PerfilRiesgo).
+"""
+import time
+
 from celery import Celery
+from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import scoped_session, sessionmaker
 
 from config import Config
+
+
+def esperar_bd(engine, intentos=15, espera_s=2):
+    """Postgres puede tardar unos segundos en aceptar conexiones tras
+    arrancar — depends_on solo espera a que el contenedor inicie, no a que
+    el servidor esté listo (mismo patrón que
+    ../ms-identidad/extensiones.py y seed/generar_seed.py).
+    """
+    for intento in range(1, intentos + 1):
+        try:
+            with engine.connect():
+                return
+        except OperationalError:
+            if intento == intentos:
+                raise
+            time.sleep(espera_s)
+
 
 # Productor puro: publica ReporteExtraccionPerfilRiesgoCliente, no consume —
 # no corre worker (ver run.sh).
@@ -13,4 +37,6 @@ celery_app.conf.update(
     task_default_exchange_type="topic",
 )
 
-# TODO: SQLAlchemy engine/session contra Config.DATABASE_URL (PerfilRiesgo).
+# BD PerfilRiesgo.
+engine = create_engine(Config.DATABASE_URL, pool_pre_ping=True)
+Session = scoped_session(sessionmaker(bind=engine))
