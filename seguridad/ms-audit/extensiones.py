@@ -33,7 +33,7 @@ celery_app.conf.update(
     task_default_exchange_type="topic",
     task_queues=[_sesion_accion_queue, _extraccion_queue],
     task_routes={
-        "audit.registrar_sesion_accion": {
+        Config.SESION_ACCION_TASK_NAME: {
             "queue": Config.SESION_ACCION_QUEUE,
             "routing_key": Config.SESION_ACCION_ROUTING_KEY,
         },
