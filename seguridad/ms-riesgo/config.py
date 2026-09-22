@@ -5,10 +5,8 @@ import os
 class Config:
     # Base de datos PerfilRiesgo (datos sensibles del cliente) — el objetivo
     # del ataque de confidencialidad (ASR1).
-    # Nombre de variable específico (no "DATABASE_URL" a secas): el .env se
-    # comparte entre los 5 servicios, y ya estaba definido así en
-    # ../.env.example desde el scaffolding original — este servicio no lo
-    # leía todavía.
+    # Nombre de variable específico — ver la misma nota en
+    # ../ms-identidad/config.py (el .env se comparte entre los 5 servicios).
     DATABASE_URL = os.getenv(
         "RIESGO_DATABASE_URL",
         "postgresql://solventa:solventa@ms-riesgo-db:5432/perfilriesgo",

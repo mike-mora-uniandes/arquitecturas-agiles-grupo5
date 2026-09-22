@@ -4,8 +4,10 @@ import os
 
 class Config:
     # HistorialRegistrosUsuario + HistorialConexion — PostgreSQL propio.
+    # Nombre de variable específico — ver la misma nota en
+    # ../ms-identidad/config.py (el .env se comparte entre los 5 servicios).
     DATABASE_URL = os.getenv(
-        "DATABASE_URL", "postgresql://solventa:solventa@ms-audit-db:5432/audit"
+        "AUDIT_DATABASE_URL", "postgresql://solventa:solventa@ms-audit-db:5432/audit"
     )
 
     RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672//")
@@ -15,6 +17,9 @@ class Config:
     SESION_ACCION_QUEUE = os.getenv("SESION_ACCION_QUEUE", "audit.sesion_accion.q")
     SESION_ACCION_ROUTING_KEY = os.getenv(
         "SESION_ACCION_ROUTING_KEY", "identidad.sesion_accion"
+    )
+    SESION_ACCION_TASK_NAME = os.getenv(
+        "SESION_ACCION_TASK_NAME", "audit.registrar_sesion_accion"
     )
     EXTRACCION_QUEUE = os.getenv("EXTRACCION_QUEUE", "audit.extraccion_perfil.q")
     EXTRACCION_ROUTING_KEY = os.getenv(
