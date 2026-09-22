@@ -23,18 +23,19 @@ de construcción.
 |---|---|
 | Estructura + `docker-compose` + imagen base | ✅ |
 | `ms-identidad` (ValidarUsuario + BOLA deliberado) | ✅ |
-| `ms-riesgo` / `ms-cliente` (SolicitarPerfil + integridad) | 🔀 en rama `feature/seguridad-ms-riesgo-ms-cliente` |
+| `ms-riesgo` / `ms-cliente` (SolicitarPerfil + integridad) | ✅ (mergeado en esta rama desde `feature/seguridad-ms-riesgo-ms-cliente`) |
+| **`ms-cliente`** publica `IntegridadFallida` al broker (ASR2) | ✅ productor añadido en esta rama |
 | **`ms-audit`** (clasifica intrusiones, publica incidente) | ✅ consumidores + PostgreSQL + clasificador + métricas |
 | **`ms-notificaciones`** (notifica al analista) | ✅ consume incidente + métrica de reacción |
 | **Observabilidad** (OTel + Prometheus + Grafana) | ✅ pipeline + dashboard por ASR (perfil `experimento`) |
 | `seed/` (datos dummy con Faker) | 🔀 en rama `feature/seguridad-seed-y-experimentos` |
 | `experimento/` (forjar token, mitmproxy) | 🔀 en rama `feature/seguridad-seed-y-experimentos` |
 
-> **Dependencia cruzada pendiente:** para el escenario de **integridad** (ASR2/ASR4),
-> `ms-cliente` debe publicar el evento `IntegridadFallida` al broker cuando el
-> hash del perfil no coincida. El contrato y el snippet están en
-> [`ms-audit/README.md`](ms-audit/README.md#contrato-del-evento-integridadfallida-pendiente-en-ms-cliente).
-> `ms-audit` ya consume ese evento; falta el `send_task` en `ms-cliente`.
+> **Nota de integración:** esta rama consolida `feature/seguridad-ms-riesgo-ms-cliente`
+> (PR de Jeff) para cerrar el escenario de **integridad** (ASR2/ASR4)
+> end-to-end: `ms-cliente` ahora publica `IntegridadFallida` cuando el hash no
+> coincide, y `ms-audit` lo consume, mide y notifica. Ver el contrato en
+> [`ms-audit/README.md`](ms-audit/README.md#contrato-del-evento-integridadfallida).
 
 ## Decisiones de alcance pendientes de confirmar con el equipo
 

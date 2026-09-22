@@ -71,8 +71,9 @@ def test_perfil_valido_se_entrega_con_su_hash(mock_http):
     assert resultado["hash_integridad"] == hash_valido
 
 
+@patch("logica.orquestador.publicar_integridad_fallida")
 @patch("logica.orquestador.sesion_http")
-def test_hash_alterado_en_transito_se_detecta(mock_http):
+def test_hash_alterado_en_transito_se_detecta(mock_http, mock_publicar):
     hash_original = _hash_valido(PERFIL)
     perfil_alterado = {**PERFIL, "puntaje": 999}  # alterado, hash sin recalcular
     mock_http.post.return_value = _mock_response(
@@ -84,6 +85,13 @@ def test_hash_alterado_en_transito_se_detecta(mock_http):
 
     with pytest.raises(IntegridadInvalida):
         consultar_perfil_riesgo(token="t", customer_id_solicitado="CLI-0007")
+
+    # Al detectar la manipulación se publica IntegridadFallida hacia ms-audit
+    # (ASR2), con el customer_id y una latencia de detección medida.
+    mock_publicar.assert_called_once()
+    kwargs = mock_publicar.call_args.kwargs
+    assert kwargs["customer_id"] == "CLI-0007"
+    assert kwargs["deteccion_ms"] >= 0
 
 
 @patch("logica.orquestador.sesion_http")

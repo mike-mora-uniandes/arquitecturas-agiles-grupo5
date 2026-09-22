@@ -1,9 +1,11 @@
 # ms-cliente
 
 Implementado: orquestación `IConsultarPerfilRiesgoService` (MS Identidad ->
-MS Riesgo) + `ValidadorIntegridad`. Sin broker: es el único componente del
-experimento que no publica ni consume eventos — toda su comunicación es
-HTTP síncrona. Instrumentado con OpenTelemetry (`run.sh`).
+MS Riesgo) + `ValidadorIntegridad`. Su flujo principal es HTTP síncrono; no
+consume del broker (no corre worker), pero sí lo usa como **productor puro**
+para publicar `IntegridadFallida` cuando detecta un hash manipulado (ASR2 —
+ver `tareas/publicacion.py` y `../ms-audit/README.md`). Instrumentado con
+OpenTelemetry (`run.sh`).
 
 **Propósito:** ser el punto de entrada del flujo. Ninguna solicitud avanza
 ni retorna datos hasta que el actor sea identificado y validado por

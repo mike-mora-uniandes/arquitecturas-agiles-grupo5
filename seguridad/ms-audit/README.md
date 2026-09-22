@@ -53,32 +53,25 @@ al broker y `ms-audit` lo centraliza: registra el incidente, emite la métrica
 y publica la notificación. Así se mantiene el invariante del diseño *"solo
 ms-audit emite incidentes de seguridad"*.
 
-### Contrato del evento IntegridadFallida (pendiente en ms-cliente)
+### Contrato del evento IntegridadFallida
 
-`ms-cliente` (rama de Jeffrey) debe publicar esto cuando `verificar_hash`
-falle. Un `send_task` mínimo, sin worker (productor puro):
+`ms-cliente` publica este evento cuando `verificar_hash` falla — ya está
+implementado como productor puro (`ms-cliente/tareas/publicacion.py`,
+`extensiones.py`), sin worker. Payload:
 
 ```python
-# ms-cliente: al detectar hash que no coincide (ASR2)
-from datetime import datetime, timezone
-celery_app.send_task(
-    "audit.registrar_integridad_fallida",
-    [{
-        "customer_id": customer_id_solicitado,
-        # latencia medida inline: desde que se pidió el perfil a ms-riesgo
-        # hasta que la verificación del hash falló
-        "deteccion_ms": deteccion_ms,
-        "detectado_en": datetime.now(timezone.utc).isoformat(),
-        "detalle": "hash de integridad no coincide (manipulación en tránsito)",
-    }],
-    exchange="solventa-seguridad",
-    routing_key="cliente.integridad_fallida",
-    retry=True,
-)
+{
+    "customer_id": customer_id_solicitado,
+    # latencia medida inline por ms-cliente: desde que se pidió el perfil a
+    # ms-riesgo (donde pudo alterarse en tránsito) hasta que falló el hash
+    "deteccion_ms": deteccion_ms,
+    "detectado_en": "<ISO-8601 UTC>",
+    "detalle": "hash de integridad no coincide (manipulación en tránsito)",
+}
 ```
 
-Los nombres de cola/routing key/tarea están en `.env.example`
-(`INTEGRIDAD_*`) y ya coinciden con los defaults de este servicio.
+Cola/routing key/tarea (`INTEGRIDAD_*` en `.env.example`) coinciden entre
+`ms-cliente` y `ms-audit`.
 
 ## Métricas emitidas (OTel → Prometheus)
 
