@@ -3,12 +3,13 @@ publican el incidente cuando el clasificador detecta una intrusión.
 """
 import logging
 
+from config import Config
 from extensiones import celery_app
 
 log = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, name="audit.registrar_sesion_accion")
+@celery_app.task(bind=True, name=Config.SESION_ACCION_TASK_NAME)
 def registrar_sesion_accion(self, evento):
     log.info("ReporteSesionAccion recibido: %s", evento)
     # TODO: persistir en HistorialConexion + pasar por clasificador_intrusiones.
