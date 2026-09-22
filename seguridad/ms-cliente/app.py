@@ -1,18 +1,22 @@
-"""Punto de entrada HTTP de MS Cliente (andamiaje).
+"""Punto de entrada HTTP de MS Cliente.
 
-Sin endpoints por ahora. Responsabilidad final: ser el punto de entrada del
-flujo (`IConsultarPerfilRiesgoService`), condicionar la entrega del perfil de
-riesgo a la validación del usuario (MS Identidad) y a la verificación de
-integridad del dato recibido (MS Riesgo, vía ValidadorIntegridad).
+Expone `IConsultarPerfilRiesgoService` (`/perfil-riesgo`), el punto de
+entrada del flujo: orquesta MS Identidad -> MS Riesgo y verifica la
+integridad del perfil recibido antes de responder.
 """
 from flask import Flask
+from flask_restful import Api
 
 from config import Config
+from vistas.cliente import ConsultarPerfilRiesgoRecurso
 
 
 def crear_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    api = Api(app)
+    api.add_resource(ConsultarPerfilRiesgoRecurso, "/perfil-riesgo")
 
     return app
 
