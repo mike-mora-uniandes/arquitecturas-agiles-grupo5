@@ -1,4 +1,5 @@
 """Extensiones compartidas del microservicio (sin broker — ver config.py)."""
+import requests
 
-# TODO: sesión `requests` reutilizable hacia MS Identidad / MS Riesgo cuando
-# se implemente el flujo de GestionClientes.
+# Sesión reutilizable hacia MS Identidad / MS Riesgo (logica/orquestador.py).
+sesion_http = requests.Session()
