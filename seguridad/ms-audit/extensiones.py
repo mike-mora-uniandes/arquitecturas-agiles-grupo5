@@ -4,7 +4,7 @@ produce 1) y BD (HistorialConexion, HistorialRegistrosUsuario, Incidente).
 import time
 
 from celery import Celery
-from celery.signals import worker_init
+from celery.signals import worker_init, worker_process_init
 from kombu import Exchange, Queue
 from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
@@ -98,3 +98,16 @@ def _preparar_bd_worker(**_kwargs):
     del worker, antes de forkear los hijos del pool prefork.
     """
     inicializar_bd()
+
+
+@worker_process_init.connect(weak=False)
+def _renovar_conexiones_bd(**_kwargs):
+    """Cada hijo del pool prefork debe descartar las conexiones heredadas del
+    proceso padre: las conexiones de psycopg2/libpq NO se pueden compartir
+    entre procesos tras un fork (dos hijos usando la misma conexión corrompen
+    el resultado — 'PGRES_TUPLES_OK and no message' / ResourceClosedError).
+    `engine.dispose()` vacía el pool heredado; cada hijo abre conexiones
+    nuevas de forma perezosa. (El engine se crea en el padre, antes del fork,
+    por eso hay que renovarlo aquí y no en worker_init.)
+    """
+    engine.dispose()
