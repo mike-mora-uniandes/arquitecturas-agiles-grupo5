@@ -11,9 +11,10 @@ from config import Config
 from extensiones import celery_app
 
 
-def publicar_integridad_fallida(*, customer_id, deteccion_ms, detalle=None):
+def publicar_integridad_fallida(*, customer_id, deteccion_ms, detalle=None, request_id=None):
     evento = {
         "customer_id": customer_id,
+        "request_id": request_id,
         "deteccion_ms": deteccion_ms,
         "detectado_en": datetime.now(timezone.utc).isoformat(),
         "detalle": detalle

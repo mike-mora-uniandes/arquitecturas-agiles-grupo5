@@ -2,11 +2,6 @@
 import os
 
 
-def _lista(valor: str) -> list[str]:
-    """Convierte una variable 'a,b,c' en ['a','b','c'] (sin vacíos)."""
-    return [x.strip() for x in valor.split(",") if x.strip()]
-
-
 class Config:
     # HistorialRegistrosUsuario + HistorialConexion + incidentes — PostgreSQL
     # propio. Nombre de variable específico — el .env se comparte entre los 5
@@ -64,11 +59,10 @@ class Config:
     ASR2_UMBRAL_MS = float(os.getenv("ASR2_UMBRAL_MS", "500"))
 
     # --- Señales del clasificador de intrusiones (Detect Intrusion) ---
-    # País/device del atacante simulados con datos dummy (ver
-    # ../../experimento/forjar_token.py y ../../seed/). No es GeoIP real:
-    # una lista de bloqueo configurable materializa "contexto anómalo".
-    PAISES_ANOMALOS = _lista(os.getenv("PAISES_ANOMALOS", "IR,KP,SY"))
-    DEVICES_ANOMALOS = _lista(os.getenv("DEVICES_ANOMALOS", "unknown-device"))
+    # La anomalía de comportamiento se decide comparando el país/device de la
+    # request contra el habitual del actor (tabla comportamiento_habitual,
+    # sembrada por seed/), no contra una lista estática. Ver
+    # logica/clasificador_intrusiones.py.
 
     # Ventana de correlación: una sesión sospechosa y una extracción se
     # consideran parte del mismo patrón si ocurren dentro de esta ventana.

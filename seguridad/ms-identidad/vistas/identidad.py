@@ -14,6 +14,7 @@ parser.add_argument(
 parser.add_argument("ip", type=str, required=False, location="json")
 parser.add_argument("device", type=str, required=False, location="json")
 parser.add_argument("pais", type=str, required=False, location="json")
+parser.add_argument("request_id", type=str, required=False, location="json")
 
 
 class ValidarUsuarioRecurso(Resource):
@@ -32,6 +33,7 @@ class ValidarUsuarioRecurso(Resource):
                 ip=args.get("ip"),
                 device=args.get("device"),
                 pais=args.get("pais"),
+                request_id=args.get("request_id"),
             )
             return {"validado": False, "error": str(exc)}, 401
 
@@ -42,6 +44,7 @@ class ValidarUsuarioRecurso(Resource):
             ip=args.get("ip"),
             device=args.get("device"),
             pais=args.get("pais"),
+            request_id=args.get("request_id"),
         )
 
         return {

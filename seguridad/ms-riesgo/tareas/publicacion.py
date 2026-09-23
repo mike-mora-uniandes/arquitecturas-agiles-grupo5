@@ -8,13 +8,15 @@ from config import Config
 from extensiones import celery_app
 
 
-def publicar_reporte_extraccion(*, customer_id):
+def publicar_reporte_extraccion(*, customer_id, request_id=None):
     """Se llama en cada extracción de perfil atendida (ver
     ../vistas/riesgo.py) para que ms-audit pueda correlacionar patrones de
-    acceso (ASR1, confidencialidad).
+    acceso (ASR1, confidencialidad). `request_id` empareja esta extracción con
+    su sesión.
     """
     evento = {
         "customer_id": customer_id,
+        "request_id": request_id,
         "reportado_en": datetime.now(timezone.utc).isoformat(),
     }
 

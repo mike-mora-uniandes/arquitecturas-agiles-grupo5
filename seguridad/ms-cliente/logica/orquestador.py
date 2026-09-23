@@ -14,6 +14,7 @@ broker para que ms-audit emita la métrica y notifique (ver
 tareas/publicacion.py y ../ms-audit/README.md).
 """
 import time
+import uuid
 
 from config import Config
 from extensiones import sesion_http
@@ -38,6 +39,11 @@ class IntegridadInvalida(Exception):
 def consultar_perfil_riesgo(
     *, token, customer_id_solicitado, ip=None, device=None, pais=None
 ):
+    # Un request_id por petición, propagado a ms-identidad y ms-riesgo para que
+    # ms-audit empareje la sesión y la extracción de ESTA request exactamente
+    # (cada request es una extracción; ver ../ms-audit/README.md).
+    request_id = uuid.uuid4().hex
+
     respuesta_identidad = sesion_http.post(
         f"{Config.MS_IDENTIDAD_URL}/validar-usuario",
         json={
@@ -46,6 +52,7 @@ def consultar_perfil_riesgo(
             "ip": ip,
             "device": device,
             "pais": pais,
+            "request_id": request_id,
         },
         timeout=5,
     )
@@ -58,7 +65,9 @@ def consultar_perfil_riesgo(
     # hash inconsistente al verificarlo.
     solicitado_en = time.monotonic()
     respuesta_riesgo = sesion_http.get(
-        f"{Config.MS_RIESGO_URL}/perfiles/{customer_id_solicitado}", timeout=5
+        f"{Config.MS_RIESGO_URL}/perfiles/{customer_id_solicitado}",
+        headers={"X-Request-Id": request_id},
+        timeout=5,
     )
     if respuesta_riesgo.status_code == 404:
         raise PerfilNoEncontrado()
@@ -69,7 +78,9 @@ def consultar_perfil_riesgo(
     if not verificar_hash(perfil, hash_recibido):
         deteccion_ms = (time.monotonic() - solicitado_en) * 1000.0
         publicar_integridad_fallida(
-            customer_id=customer_id_solicitado, deteccion_ms=deteccion_ms
+            customer_id=customer_id_solicitado,
+            deteccion_ms=deteccion_ms,
+            request_id=request_id,
         )
         raise IntegridadInvalida()
 

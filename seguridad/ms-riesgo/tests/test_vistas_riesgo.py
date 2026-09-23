@@ -46,13 +46,17 @@ def client(monkeypatch):
 
 @patch("vistas.riesgo.publicar_reporte_extraccion")
 def test_solicitar_perfil_existente_devuelve_hash_y_publica_reporte(mock_publicar, client):
-    response = client.get("/perfiles/CLI-0007")
+    response = client.get(
+        "/perfiles/CLI-0007", headers={"X-Request-Id": "req-xyz"}
+    )
 
     assert response.status_code == 200
     body = response.get_json()
     assert body["customer_id"] == "CLI-0007"
     assert "hash_integridad" in body
-    mock_publicar.assert_called_once_with(customer_id="CLI-0007")
+    mock_publicar.assert_called_once_with(
+        customer_id="CLI-0007", request_id="req-xyz"
+    )
 
 
 @patch("vistas.riesgo.publicar_reporte_extraccion")

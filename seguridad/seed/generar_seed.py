@@ -19,6 +19,7 @@ from faker import Faker
 
 IDENTIDAD_DB_URL = os.environ["IDENTIDAD_DATABASE_URL"]
 RIESGO_DB_URL = os.environ["RIESGO_DATABASE_URL"]
+AUDIT_DB_URL = os.environ["AUDIT_DATABASE_URL"]
 
 N_CLIENTES = int(os.getenv("SEED_N_CLIENTES", "10"))
 SEED_SCENARIO = os.getenv("SEED_SCENARIO", "baseline").lower()
@@ -82,13 +83,21 @@ def _is_suspicious(customer_id: str) -> bool:
     return customer_id in _scenario_config()["suspicious_ids"]
 
 
+# Huella de conexión "normal" de un cliente. Debe coincidir con lo que envía
+# el tráfico legítimo (locustfile.py: pais=CO, device=desktop-linux), para que
+# la detección por comportamiento en ms-audit (comparar la request actual
+# contra este habitual) NO marque como anómalo el tráfico legítimo. El ataque
+# (mitm/BOLA/anomaly_ip) llega con país/device distintos y sí se desvía.
+PAIS_HABITUAL = "CO"
+DEVICE_HABITUAL = "desktop-linux"
+
+
 def _pais_y_device(customer_id: str):
-    if _is_suspicious(customer_id):
-        return ("AR", f"device-{customer_id.lower()}-sospechoso")
-    return (
-        fake.country_code(representation="alpha-2"),
-        f"device-{customer_id.lower()}",
-    )
+    # Habitual uniforme: la "sospecha" de un cliente vive en su perfil de riesgo
+    # (ver poblar_perfil_riesgo / _is_suspicious), no en su huella de conexión.
+    # La anomalía de comportamiento se decide en runtime comparando la request
+    # actual contra este habitual, no sembrando un habitual raro.
+    return (PAIS_HABITUAL, DEVICE_HABITUAL)
 
 
 def poblar_gestion_roles():
@@ -115,6 +124,19 @@ def poblar_gestion_roles():
                     device_habitual TEXT NOT NULL
                 )
                 """
+            )
+            # Auto-reparación: si ms-identidad ganó la carrera de arranque y
+            # creó `usuarios` con su propio modelo (customer_id/nombre/rol, sin
+            # pais_habitual/device_habitual), el CREATE de arriba es no-op y el
+            # INSERT de abajo fallaría por columnas inexistentes. Estas dos
+            # sentencias garantizan que las columnas existan gane quien gane la
+            # carrera. Son nullable a propósito: ms-identidad no las conoce y no
+            # las escribe, pero el seed sí las puebla en el mismo INSERT.
+            cur.execute(
+                "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pais_habitual TEXT"
+            )
+            cur.execute(
+                "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS device_habitual TEXT"
             )
             cur.executemany(
                 "INSERT INTO roles (nombre) VALUES (%s) ON CONFLICT DO NOTHING",
@@ -207,10 +229,52 @@ def poblar_perfil_riesgo():
         conn.close()
 
 
+def poblar_comportamiento_audit():
+    """Alimenta la línea base de comportamiento en audit-db.
+
+    ms-audit detecta intrusiones por comportamiento comparando el país/device
+    de cada request (que ya viaja en ReporteSesionAccion) contra el habitual
+    del cliente. Ese habitual es dato de referencia (no un evento de runtime),
+    así que se siembra aquí — misma huella normal que usa el tráfico legítimo
+    (CO/desktop-linux), para que solo las desviaciones (ataque) se marquen.
+    """
+    conn = _conectar(AUDIT_DB_URL)
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS comportamiento_habitual (
+                    customer_id TEXT PRIMARY KEY,
+                    pais_habitual TEXT NOT NULL,
+                    device_habitual TEXT NOT NULL
+                )
+                """
+            )
+            filas = [(ANALISTA_CUSTOMER_ID, PAIS_HABITUAL, "analista-console")]
+            for customer_id in _cliente_ids():
+                pais_habitual, device_habitual = _pais_y_device(customer_id)
+                filas.append((customer_id, pais_habitual, device_habitual))
+
+            cur.executemany(
+                """
+                INSERT INTO comportamiento_habitual (
+                    customer_id, pais_habitual, device_habitual
+                ) VALUES (%s, %s, %s)
+                ON CONFLICT (customer_id) DO UPDATE SET
+                    pais_habitual = EXCLUDED.pais_habitual,
+                    device_habitual = EXCLUDED.device_habitual
+                """,
+                filas,
+            )
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     poblar_gestion_roles()
     poblar_perfil_riesgo()
+    poblar_comportamiento_audit()
     print(
         f"seed: escenario={SEED_SCENARIO} ratio_ataques={_scenario_config()['attack_ratio']} "
-        f"clientes={len(_cliente_ids())}"
+        f"clientes={len(_cliente_ids())} (identidad + riesgo + baseline audit)"
     )

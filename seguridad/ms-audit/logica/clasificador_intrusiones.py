@@ -1,42 +1,41 @@
 """Clasificador de patrones de intrusión (táctica Detect Intrusion).
 
-Correlaciona los eventos de ReporteSesionAccion (ms-identidad) y
-ReporteExtraccionPerfilRiesgoCliente (ms-riesgo) para decidir si un patrón de
-acceso constituye una intrusión no autorizada de confidencialidad (ASR1).
+Modelo simple y exacto: **cada request es una extracción**, y su evento de
+sesión (ms-identidad) y su evento de extracción (ms-riesgo) comparten un
+`request_id` generado por ms-cliente. ms-audit empareja ambos por ese id —
+sin ventanas ni agrupación — y decide si esa request fue una intrusión.
 
-Señales de intrusión sobre una sesión (independientes; basta una):
-  1. BOLA — sesión validada donde el customer_id del token difiere del
-     customer_id solicitado (ms-identidad no compara ambos, es la
-     vulnerabilidad deliberada). Un token válido para un cliente usado para
-     extraer el perfil de otro.
-  2. Contexto anómalo — país o device en la lista de bloqueo (dummy del
-     atacante: país "IR", device "unknown-device"). Cubre el caso en que el
-     atacante forja un token que se hace pasar por la propia víctima (mismo
-     customer_id en token y solicitud, sin mismatch), detectable solo por su
-     origen anómalo.
+Una request es intrusión de confidencialidad si su sesión (validada) es
+sospechosa por:
+  1. BOLA — el customer_id del token difiere del solicitado (ms-identidad no
+     los compara: la vulnerabilidad deliberada).
+  2. Comportamiento anómalo — el país o device de la request difiere del
+     habitual del actor (tabla comportamiento_habitual, sembrada por seed/).
 
-La intrusión se confirma cuando esa sesión sospechosa se cruza con una
-extracción real del mismo customer_id dentro de la ventana de correlación.
-
-NOTA de coordinación (equipo): las dos señales cubren las dos formas en que
-hoy se materializa el ataque de confidencialidad entre las ramas de Lorena
-(forjar_token: token=víctima, detectable por contexto) y la narrativa BOLA de
-ms-identidad (token≠solicitado). Ver README de ms-audit.
+Cada extracción no autorizada cuenta como su propio incidente; una extracción
+legítima (su sesión coincide con el habitual) no se marca.
 """
-from datetime import timedelta
-
-from sqlalchemy import select
-
-from config import Config
-from logica.modelos import HistorialConexion
+from logica.modelos import ComportamientoHabitual, HistorialConexion
 
 
-def _sesion_es_sospechosa(sesion: HistorialConexion) -> str | None:
-    """Devuelve el motivo (str) si la sesión es sospechosa, o None."""
+def _baseline(session, customer_id):
+    """Habitual del actor, o None si no hay línea base sembrada para él."""
+    if not customer_id:
+        return None
+    return session.get(ComportamientoHabitual, customer_id)
+
+
+def _sesion_es_sospechosa(sesion: HistorialConexion, baseline) -> str | None:
+    """Devuelve el motivo (str) si la sesión es sospechosa, o None.
+
+    `baseline` es el ComportamientoHabitual del actor (customer_id del token),
+    o None si no está sembrado.
+    """
     if not sesion.validado:
         # Un rechazo no es una extracción consumada; no dispara incidente de
         # confidencialidad por sí solo (sí queda registrado en el historial).
         return None
+
     if (
         sesion.customer_id_token
         and sesion.customer_id_token != sesion.customer_id_solicitado
@@ -45,29 +44,42 @@ def _sesion_es_sospechosa(sesion: HistorialConexion) -> str | None:
             f"BOLA: token de '{sesion.customer_id_token}' usado para extraer "
             f"el perfil de '{sesion.customer_id_solicitado}'"
         )
-    if sesion.pais in Config.PAISES_ANOMALOS:
-        return f"origen anómalo: país '{sesion.pais}'"
-    if sesion.device in Config.DEVICES_ANOMALOS:
-        return f"origen anómalo: device '{sesion.device}'"
+
+    if baseline is not None:
+        if baseline.pais_habitual and sesion.pais != baseline.pais_habitual:
+            return (
+                f"comportamiento anómalo: país '{sesion.pais}' distinto del "
+                f"habitual '{baseline.pais_habitual}' de "
+                f"'{sesion.customer_id_token}'"
+            )
+        if baseline.device_habitual and sesion.device != baseline.device_habitual:
+            return (
+                f"comportamiento anómalo: device '{sesion.device}' distinto del "
+                f"habitual '{baseline.device_habitual}' de "
+                f"'{sesion.customer_id_token}'"
+            )
+
     return None
 
 
-def buscar_sesion_sospechosa(session, customer_id: str, referencia):
-    """Busca la sesión sospechosa más reciente para `customer_id` dentro de la
-    ventana de correlación alrededor de `referencia` (timestamp de la
-    extracción). Devuelve (sesion, motivo) o (None, None).
-    """
-    ventana = timedelta(seconds=Config.VENTANA_CORRELACION_S)
-    filas = session.execute(
-        select(HistorialConexion)
-        .where(HistorialConexion.customer_id_solicitado == customer_id)
-        .where(HistorialConexion.reportado_en >= referencia - ventana)
-        .where(HistorialConexion.reportado_en <= referencia + ventana)
-        .order_by(HistorialConexion.reportado_en.desc())
-    ).scalars()
+def sesion_de_request(session, request_id: str):
+    """La sesión (HistorialConexion) de esa request, o None si aún no llegó."""
+    if not request_id:
+        return None
+    return (
+        session.query(HistorialConexion)
+        .filter_by(request_id=request_id)
+        .order_by(HistorialConexion.id.desc())
+        .first()
+    )
 
-    for sesion in filas:
-        motivo = _sesion_es_sospechosa(sesion)
-        if motivo:
-            return sesion, motivo
-    return None, None
+
+def evaluar_request(session, request_id: str):
+    """Empareja la extracción con su sesión por `request_id` y devuelve el
+    motivo de intrusión, o None si la sesión no llegó todavía o no es
+    sospechosa.
+    """
+    sesion = sesion_de_request(session, request_id)
+    if sesion is None:
+        return None
+    return _sesion_es_sospechosa(sesion, _baseline(session, sesion.customer_id_token))

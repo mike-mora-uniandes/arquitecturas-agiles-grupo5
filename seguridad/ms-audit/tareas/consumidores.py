@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 import telemetria
 from config import Config
 from extensiones import Session, celery_app
-from logica.clasificador_intrusiones import buscar_sesion_sospechosa
+from logica.clasificador_intrusiones import evaluar_request
 from logica.modelos import (
     HistorialConexion,
     HistorialRegistrosUsuario,
@@ -82,6 +82,7 @@ def registrar_sesion_accion(self, evento):
     try:
         session.add(
             HistorialConexion(
+                request_id=evento.get("request_id"),
                 customer_id_token=evento.get("customer_id_token"),
                 customer_id_solicitado=evento["customer_id_solicitado"],
                 validado=bool(evento.get("validado")),
@@ -92,7 +93,8 @@ def registrar_sesion_accion(self, evento):
             )
         )
         session.commit()
-        _correlacionar_confidencialidad(session, evento["customer_id_solicitado"])
+        # La extracción de esta request pudo llegar antes que su sesión.
+        _correlacionar_request(session, evento.get("request_id"))
     finally:
         Session.remove()
 
@@ -108,12 +110,13 @@ def registrar_extraccion_perfil(self, evento):
     try:
         session.add(
             HistorialRegistrosUsuario(
+                request_id=evento.get("request_id"),
                 customer_id=evento["customer_id"],
                 reportado_en=_parse_ts(evento["reportado_en"]),
             )
         )
         session.commit()
-        _correlacionar_confidencialidad(session, evento["customer_id"])
+        _correlacionar_request(session, evento.get("request_id"))
     finally:
         Session.remove()
 
@@ -142,21 +145,32 @@ def registrar_integridad_fallida(self, evento):
         Session.remove()
 
 
-def _correlacionar_confidencialidad(session, customer_id: str):
-    """Busca una extracción no incidentada de `customer_id` que cruce con una
-    sesión sospechosa; si la encuentra, levanta el incidente de
-    confidencialidad y marca la extracción para no duplicarlo.
+def _correlacionar_request(session, request_id: str):
+    """Empareja la extracción de esta request con su sesión (mismo request_id)
+    y, si la sesión es sospechosa, levanta un incidente por la extracción.
+
+    Cada request es una extracción independiente: una request = un incidente
+    como máximo. Se dispara desde ambos consumidores (la sesión y la extracción
+    pueden llegar en cualquier orden); la extracción se marca `incidentado`
+    para no procesarla dos veces.
     """
-    extraccion = session.query(HistorialRegistrosUsuario).filter_by(
-        customer_id=customer_id, incidentado=False
-    ).order_by(HistorialRegistrosUsuario.reportado_en.desc()).first()
-    if extraccion is None:
+    if not request_id:
         return
 
-    sesion, motivo = buscar_sesion_sospechosa(
-        session, customer_id, extraccion.reportado_en
+    motivo = evaluar_request(session, request_id)
+    if motivo is None:
+        # La sesión aún no llegó, o no es sospechosa: nada que hacer (si llega
+        # después, el consumidor de sesión reevaluará esta request).
+        return
+
+    extraccion = (
+        session.query(HistorialRegistrosUsuario)
+        .filter_by(request_id=request_id, incidentado=False)
+        .order_by(HistorialRegistrosUsuario.id.asc())
+        .first()
     )
-    if sesion is None:
+    if extraccion is None:
+        # Sesión sospechosa pero su extracción aún no llegó (o ya incidentada).
         return
 
     ahora = datetime.now(timezone.utc)
@@ -168,7 +182,7 @@ def _correlacionar_confidencialidad(session, customer_id: str):
     _registrar_incidente(
         session,
         tipo="confidencialidad",
-        customer_id=customer_id,
+        customer_id=extraccion.customer_id,
         deteccion_ms=deteccion_ms,
         detalle=motivo,
     )

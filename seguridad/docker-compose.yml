@@ -68,19 +68,49 @@ services:
     ports:
       - "6001:5000"
     depends_on:
-      - rabbitmq
-      - ms-identidad-db
-      - seed
+      rabbitmq:
+        condition: service_started
+      ms-identidad-db:
+        condition: service_started
+      # Esperar a que el seed TERMINE (no solo que arranque): así el seed crea
+      # las tablas con su esquema y las puebla antes de que este servicio haga
+      # create_all, evitando la carrera de esquemas en `usuarios`.
+      seed:
+        condition: service_completed_successfully
 
   ms-cliente:
     <<: *ms-common
     build: ./ms-cliente
     environment:
       OTEL_SERVICE_NAME: ms-cliente
+      # Siempre a través de mitmproxy: simula el segmento de red comprometido
+      # entre ms-cliente y ms-riesgo. mitmproxy altera solo una fracción
+      # (MITM_ATTACK_RATIO), así una sola corrida ejercita confidencialidad
+      # (tráfico intacto) e integridad (fracción alterada).
+      MS_RIESGO_URL: http://mitmproxy:8081
     ports:
       - "6002:5000"
     depends_on:
       - ms-identidad
+      - ms-riesgo
+      - mitmproxy
+
+  mitmproxy:
+    # Reverse-proxy delante de ms-riesgo que altera el `puntaje` de una fracción
+    # de los perfiles en tránsito (experimento/mitm_alterar_perfil.py), para el
+    # escenario de integridad (ASR2/ASR4). MITM_ATTACK_RATIO=0 lo deja como
+    # passthrough (flujo funcional puro); 1.0 altera todo (corrida dedicada).
+    image: mitmproxy/mitmproxy:10.4.2
+    environment:
+      MITM_ATTACK_RATIO: ${MITM_ATTACK_RATIO:-0.2}
+    command: >
+      mitmdump -s /addon/mitm_alterar_perfil.py
+      --mode reverse:http://ms-riesgo:5000
+      --listen-port 8081
+      --set connection_strategy=lazy
+    volumes:
+      - ./experimento:/addon:ro
+    depends_on:
       - ms-riesgo
 
   ms-riesgo:
@@ -91,9 +121,13 @@ services:
     ports:
       - "6003:5000"
     depends_on:
-      - rabbitmq
-      - ms-riesgo-db
-      - seed
+      rabbitmq:
+        condition: service_started
+      ms-riesgo-db:
+        condition: service_started
+      # Esperar a que el seed TERMINE antes de create_all (ver ms-identidad).
+      seed:
+        condition: service_completed_successfully
 
   ms-audit:
     <<: *ms-common
@@ -103,8 +137,14 @@ services:
     ports:
       - "6004:5000"
     depends_on:
-      - rabbitmq
-      - ms-audit-db
+      rabbitmq:
+        condition: service_started
+      ms-audit-db:
+        condition: service_started
+      # Espera a que el seed cree y pueble comportamiento_habitual (línea base
+      # para la detección por comportamiento) antes de consumir eventos.
+      seed:
+        condition: service_completed_successfully
 
   ms-notificaciones:
     <<: *ms-common
