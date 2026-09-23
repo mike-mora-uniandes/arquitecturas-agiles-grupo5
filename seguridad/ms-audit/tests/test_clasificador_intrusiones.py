@@ -1,8 +1,9 @@
-"""Pruebas del clasificador de intrusiones (confidencialidad, ASR1).
+"""Pruebas del detector heurístico de intrusiones (confidencialidad, ASR1).
 
-Usan SQLite en memoria — no requieren PostgreSQL ni el broker. Cubren las dos
-señales de sospecha (BOLA y comportamiento anómalo vs. habitual) y el
-emparejamiento exacto sesión↔extracción por request_id.
+SQLite en memoria — sin PostgreSQL ni broker. Cubren: BOLA, comportamiento
+probabilístico (país/device improbable vs. historial del actor), patrones
+múltiples legítimos, exclusión de conexiones anómalas (anti-envenenamiento),
+historial insuficiente y el emparejamiento por request_id.
 """
 from datetime import datetime, timezone
 
@@ -10,22 +11,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from logica.modelos import Base, ComportamientoHabitual, HistorialConexion
-from logica.clasificador_intrusiones import _sesion_es_sospechosa, evaluar_request
-
-# Habitual del actor CLI-0002 (huella normal = CO/desktop-linux). Para las
-# aserciones puras (_sesion_es_sospechosa) basta un objeto suelto; para las
-# pruebas con BD se usa _habitual() (instancia nueva por sesión, no se puede
-# reutilizar la misma entre sesiones SQLite distintas).
-BASE_HABITUAL = ComportamientoHabitual(
-    customer_id="CLI-0002", pais_habitual="CO", device_habitual="desktop-linux"
-)
-
-
-def _habitual():
-    return ComportamientoHabitual(
-        customer_id="CLI-0002", pais_habitual="CO", device_habitual="desktop-linux"
-    )
+from logica.detector import evaluar
+from logica.clasificador_intrusiones import evaluar_request
+from logica.modelos import Base, HistorialConexion
 
 
 @pytest.fixture()
@@ -37,74 +25,89 @@ def session():
     s.close()
 
 
-def _sesion(**kw):
+def _conexion(**kw):
     base = dict(
-        request_id="req-1",
+        request_id=None,
         customer_id_token="CLI-0002",
-        customer_id_solicitado="CLI-0002",  # sin BOLA por defecto
+        customer_id_solicitado="CLI-0002",
         validado=True,
         ip="10.0.0.5",
         device="desktop-linux",
         pais="CO",
         reportado_en=datetime.now(timezone.utc),
+        anomala=False,
     )
     base.update(kw)
     return HistorialConexion(**base)
 
 
-# --- señal pura (_sesion_es_sospechosa) ---
-
-def test_bola_es_sospechosa_sin_baseline():
-    s = _sesion(customer_id_solicitado="CLI-0001")
-    assert "BOLA" in _sesion_es_sospechosa(s, None)
-
-
-def test_pais_distinto_del_habitual_es_sospechosa():
-    assert "país" in _sesion_es_sospechosa(_sesion(pais="US"), BASE_HABITUAL)
-
-
-def test_device_distinto_del_habitual_es_sospechosa():
-    assert "device" in _sesion_es_sospechosa(_sesion(device="device-nuevo"), BASE_HABITUAL)
-
-
-def test_sesion_legitima_coincide_con_habitual_no_es_sospechosa():
-    assert _sesion_es_sospechosa(_sesion(), BASE_HABITUAL) is None
-
-
-def test_sin_baseline_y_sin_bola_no_es_sospechosa():
-    assert _sesion_es_sospechosa(_sesion(pais="US"), None) is None
-
-
-def test_rechazo_no_es_sospechosa():
-    assert _sesion_es_sospechosa(_sesion(validado=False, pais="US"), BASE_HABITUAL) is None
-
-
-# --- emparejamiento por request_id (evaluar_request) ---
-
-def test_evaluar_request_anomalo(session):
-    session.add(_habitual())
-    session.add(_sesion(request_id="req-A", pais="US"))
+def _historial_normal(session, actor="CLI-0002", n=5, pais="CO", device="desktop-linux",
+                      anomala=False):
+    for _ in range(n):
+        session.add(_conexion(customer_id_token=actor, customer_id_solicitado=actor,
+                              pais=pais, device=device, anomala=anomala))
     session.commit()
-    assert "país" in evaluar_request(session, "req-A")
 
 
-def test_evaluar_request_legitimo(session):
-    session.add(_habitual())
-    session.add(_sesion(request_id="req-B"))  # CO/desktop-linux = habitual
+def test_bola_es_intrusion_sin_historial(session):
+    s = _conexion(customer_id_token="CLI-0002", customer_id_solicitado="CLI-0001")
+    session.add(s); session.commit()
+    es, score, motivos = evaluar(session, s)
+    assert es and score == 1.0 and "BOLA" in motivos[0]
+
+
+def test_comportamiento_pais_improbable_es_intrusion(session):
+    _historial_normal(session, n=5, pais="CO", device="desktop-linux")
+    s = _conexion(pais="US", device="device-nuevo")
+    session.add(s); session.commit()
+    es, score, motivos = evaluar(session, s)
+    assert es and "anómalo" in motivos[0]
+
+
+def test_comportamiento_habitual_no_es_intrusion(session):
+    _historial_normal(session, n=5, pais="CO", device="desktop-linux")
+    s = _conexion(pais="CO", device="desktop-linux")
+    session.add(s); session.commit()
+    es, _score, _m = evaluar(session, s)
+    assert es is False
+
+
+def test_patrones_multiples_legitimos_no_marca(session):
+    # el actor usa CO y US legítimamente -> una request desde US no es anómala
+    _historial_normal(session, n=5, pais="CO", device="desktop-linux")
+    _historial_normal(session, n=5, pais="US", device="desktop-linux")
+    s = _conexion(pais="US", device="desktop-linux")
+    session.add(s); session.commit()
+    es, _score, _m = evaluar(session, s)
+    assert es is False
+
+
+def test_conexiones_anomalas_no_envenenan(session):
+    # 5 normales CO + 5 anómalas US (marcadas): US sigue siendo improbable
+    _historial_normal(session, n=5, pais="CO", device="desktop-linux")
+    _historial_normal(session, n=5, pais="US", device="device-nuevo", anomala=True)
+    s = _conexion(pais="US", device="device-nuevo")
+    session.add(s); session.commit()
+    es, _score, motivos = evaluar(session, s)
+    assert es and "anómalo" in motivos[0]
+
+
+def test_historial_insuficiente_solo_bola(session):
+    # con 1 sola conexión previa (< min muestras) no hay señal de comportamiento
+    _historial_normal(session, n=1, pais="CO", device="desktop-linux")
+    s = _conexion(pais="US", device="device-nuevo")
+    session.add(s); session.commit()
+    es, _score, _m = evaluar(session, s)
+    assert es is False
+
+
+def test_evaluar_request_empareja_por_id(session):
+    _historial_normal(session, n=5, pais="CO", device="desktop-linux")
+    session.add(_conexion(request_id="req-A", pais="US", device="device-nuevo"))
     session.commit()
-    assert evaluar_request(session, "req-B") is None
+    sesion, motivo = evaluar_request(session, "req-A")
+    assert sesion is not None and "anómalo" in motivo
 
 
-def test_evaluar_request_sin_sesion_todavia(session):
-    # la extracción llegó antes que su sesión: aún no se puede clasificar
-    assert evaluar_request(session, "req-inexistente") is None
-
-
-def test_cada_request_se_evalua_independiente(session):
-    # misma cuenta, dos requests distintas: una legítima y una anómala.
-    session.add(_habitual())
-    session.add(_sesion(request_id="req-legit", pais="CO", device="desktop-linux"))
-    session.add(_sesion(request_id="req-mal", pais="US", device="device-nuevo"))
-    session.commit()
-    assert evaluar_request(session, "req-legit") is None
-    assert "país" in evaluar_request(session, "req-mal")
+def test_evaluar_request_sin_sesion(session):
+    assert evaluar_request(session, "req-inexistente") == (None, None)

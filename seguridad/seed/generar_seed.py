@@ -229,40 +229,74 @@ def poblar_perfil_riesgo():
         conn.close()
 
 
-def poblar_comportamiento_audit():
-    """Alimenta la línea base de comportamiento en audit-db.
+HISTORIAL_NORMALES = int(os.getenv("SEED_HISTORIAL_NORMALES", "5"))
 
-    ms-audit detecta intrusiones por comportamiento comparando el país/device
-    de cada request (que ya viaja en ReporteSesionAccion) contra el habitual
-    del cliente. Ese habitual es dato de referencia (no un evento de runtime),
-    así que se siembra aquí — misma huella normal que usa el tráfico legítimo
-    (CO/desktop-linux), para que solo las desviaciones (ataque) se marquen.
+
+def poblar_historial_audit():
+    """Llena el historial de conexiones normales en audit-db (la MISMA tabla
+    operativa `historial_conexion`), para que ms-audit tenga una línea base de
+    comportamiento desde la primera request (arranque en frío). El "normal" se
+    deriva luego de este historial excluyendo las conexiones anómalas.
+
+    DDL defensiva (CREATE/ALTER IF NOT EXISTS): tolera que ms-audit haya creado
+    la tabla con su modelo. Idempotente: solo inserta si está vacía (ms-audit
+    también auto-siembra como respaldo; el guard evita duplicar).
     """
     conn = _conectar(AUDIT_DB_URL)
     try:
         with conn, conn.cursor() as cur:
             cur.execute(
                 """
-                CREATE TABLE IF NOT EXISTS comportamiento_habitual (
-                    customer_id TEXT PRIMARY KEY,
-                    pais_habitual TEXT NOT NULL,
-                    device_habitual TEXT NOT NULL
+                CREATE TABLE IF NOT EXISTS historial_conexion (
+                    id SERIAL PRIMARY KEY,
+                    request_id TEXT,
+                    customer_id_token TEXT,
+                    customer_id_solicitado TEXT NOT NULL,
+                    validado BOOLEAN NOT NULL,
+                    ip TEXT,
+                    device TEXT,
+                    pais TEXT,
+                    reportado_en TIMESTAMPTZ NOT NULL,
+                    registrado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    anomala BOOLEAN NOT NULL DEFAULT false
                 )
                 """
             )
-            filas = [(ANALISTA_CUSTOMER_ID, PAIS_HABITUAL, "analista-console")]
+            for columna, ddl in (
+                ("request_id", "TEXT"),
+                ("customer_id_token", "TEXT"),
+                ("anomala", "BOOLEAN NOT NULL DEFAULT false"),
+            ):
+                cur.execute(
+                    f"ALTER TABLE historial_conexion "
+                    f"ADD COLUMN IF NOT EXISTS {columna} {ddl}"
+                )
+
+            cur.execute("SELECT count(*) FROM historial_conexion")
+            if cur.fetchone()[0] > 0:
+                return  # ya hay historial; no duplicar
+
+            filas = []
             for customer_id in _cliente_ids():
                 pais_habitual, device_habitual = _pais_y_device(customer_id)
-                filas.append((customer_id, pais_habitual, device_habitual))
-
+                for _ in range(HISTORIAL_NORMALES):
+                    filas.append(
+                        (
+                            customer_id,   # customer_id_token (acceso legítimo propio)
+                            customer_id,   # customer_id_solicitado
+                            True,
+                            "10.0.0.5",
+                            device_habitual,
+                            pais_habitual,
+                            datetime.now(timezone.utc),
+                        )
+                    )
             cur.executemany(
                 """
-                INSERT INTO comportamiento_habitual (
-                    customer_id, pais_habitual, device_habitual
-                ) VALUES (%s, %s, %s)
-                ON CONFLICT (customer_id) DO UPDATE SET
-                    pais_habitual = EXCLUDED.pais_habitual,
-                    device_habitual = EXCLUDED.device_habitual
+                INSERT INTO historial_conexion (
+                    customer_id_token, customer_id_solicitado, validado,
+                    ip, device, pais, reportado_en
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 filas,
             )
@@ -273,8 +307,8 @@ def poblar_comportamiento_audit():
 if __name__ == "__main__":
     poblar_gestion_roles()
     poblar_perfil_riesgo()
-    poblar_comportamiento_audit()
+    poblar_historial_audit()
     print(
         f"seed: escenario={SEED_SCENARIO} ratio_ataques={_scenario_config()['attack_ratio']} "
-        f"clientes={len(_cliente_ids())} (identidad + riesgo + baseline audit)"
+        f"clientes={len(_cliente_ids())} (identidad + riesgo + historial audit)"
     )

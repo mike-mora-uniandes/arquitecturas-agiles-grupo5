@@ -157,8 +157,8 @@ def _correlacionar_request(session, request_id: str):
     if not request_id:
         return
 
-    motivo = evaluar_request(session, request_id)
-    if motivo is None:
+    sesion, motivo = evaluar_request(session, request_id)
+    if sesion is None:
         # La sesión aún no llegó, o no es sospechosa: nada que hacer (si llega
         # después, el consumidor de sesión reevaluará esta request).
         return
@@ -177,6 +177,9 @@ def _correlacionar_request(session, request_id: str):
     deteccion_ms = (ahora - extraccion.reportado_en).total_seconds() * 1000.0
 
     extraccion.incidentado = True
+    # Marca la conexión como anómala → queda excluida del cálculo del
+    # comportamiento normal del actor (evita envenenar la línea base).
+    sesion.anomala = True
     session.commit()
 
     _registrar_incidente(
