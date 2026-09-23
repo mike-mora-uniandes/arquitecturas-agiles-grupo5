@@ -113,8 +113,14 @@ services:
     ports:
       - "6004:5000"
     depends_on:
-      - rabbitmq
-      - ms-audit-db
+      rabbitmq:
+        condition: service_started
+      ms-audit-db:
+        condition: service_started
+      # Espera a que el seed cree y pueble comportamiento_habitual (línea base
+      # para la detección por comportamiento) antes de consumir eventos.
+      seed:
+        condition: service_completed_successfully
 
   ms-notificaciones:
     <<: *ms-common

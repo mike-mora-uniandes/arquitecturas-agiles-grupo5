@@ -56,6 +56,22 @@ class HistorialRegistrosUsuario(Base):
     incidentado = Column(Boolean, nullable=False, default=False)
 
 
+class ComportamientoHabitual(Base):
+    """Línea base del comportamiento normal de cada cliente (país/device
+    habitual). Es dato de referencia sembrado por seed/ (no un evento de
+    runtime), y lo usa el clasificador para marcar como anómala una sesión
+    cuyo país/device difiere del habitual del actor (Detect Intrusion por
+    comportamiento). Puede no existir para un actor desconocido: en ese caso
+    no hay señal de comportamiento (se cae a BOLA).
+    """
+
+    __tablename__ = "comportamiento_habitual"
+
+    customer_id = Column(String, primary_key=True)
+    pais_habitual = Column(String, nullable=True)
+    device_habitual = Column(String, nullable=True)
+
+
 class Incidente(Base):
     """Un patrón clasificado como intrusión no autorizada. `deteccion_ms` es
     la latencia de detección medida (t_detección - t_materialización) que
