@@ -133,7 +133,7 @@
     {
       "id": 3,
       "type": "timeseries",
-      "title": "P99 tiempo de deteccion de confidencialidad",
+      "title": "P95 tiempo de deteccion de confidencialidad",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -176,8 +176,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(tiempo_deteccion_confidencialidad_ms_milliseconds_bucket[5m])))",
-          "legendFormat": "p99"
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(tiempo_deteccion_confidencialidad_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "p95"
         }
       ]
     },
@@ -251,7 +251,7 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "P99 tiempo de deteccion de integridad",
+      "title": "P95 tiempo de deteccion de integridad",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -294,8 +294,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(tiempo_deteccion_integridad_ms_milliseconds_bucket[5m])))",
-          "legendFormat": "p99"
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(tiempo_deteccion_integridad_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "p95"
         }
       ]
     },
@@ -369,7 +369,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "P99 tiempo de notificacion, por tipo",
+      "title": "P95 tiempo de notificacion, por tipo",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -412,8 +412,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le, tipo) (rate(tiempo_notificacion_ms_milliseconds_bucket[5m])))",
-          "legendFormat": "p99 {{tipo}}"
+          "expr": "histogram_quantile(0.95, sum by (le, tipo) (rate(tiempo_notificacion_ms_milliseconds_bucket[5m])))",
+          "legendFormat": "p95 {{tipo}}"
         }
       ]
     },
