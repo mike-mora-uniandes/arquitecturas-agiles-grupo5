@@ -105,3 +105,19 @@ services:
       - "6005:5000"
     depends_on:
       - rabbitmq
+
+  locust:
+    build: ./experimento
+    volumes:
+      - ./experimento:/mnt/locust:ro
+    environment:
+      #SCENARIO: baseline
+      SCENARIO: attack
+      SECURITY_BASE_URL: http://ms-cliente:5000
+      JWT_SECRET: change-me
+      LOAD_SEED: 20240601
+    command: ["-f", "/mnt/locust/locustfile.py", "--host", "http://ms-cliente:5000"]
+    ports:
+      - "8089:8089"
+    depends_on:
+      - ms-cliente

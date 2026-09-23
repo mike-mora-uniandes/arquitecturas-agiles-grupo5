@@ -1,10 +1,13 @@
-"""Puebla con datos dummy (Faker) las bases PostgreSQL del experimento:
-GestiónRoles (ms-identidad) y PerfilRiesgo (ms-riesgo).
+"""Puebla con datos dummy las bases PostgreSQL del experimento de seguridad.
 
-Idempotente: pensado para correr cada vez que se levanta el experimento
-desde cero (`docker compose up`), igual espíritu que backend/redis/seed en
-el experimento 1. Crea sus propias tablas (`CREATE TABLE IF NOT EXISTS`) en
-vez de depender del orden de arranque de los microservicios.
+La semilla es reproducible: se puede alternar entre dos escenarios
+configurados por variables de entorno:
+
+- baseline: tráfico mayoritariamente legítimo
+- attack: mezcla de tráfico legítimo + sospechoso para medir ASR1/ASR2
+
+Esto permite comparar el comportamiento del mismo flujo con dos perfiles de
+carga distintos sin depender del azar.
 """
 import os
 import random
@@ -14,23 +17,44 @@ from datetime import datetime, timezone
 import psycopg2
 from faker import Faker
 
-fake = Faker("es_CO")
-
 IDENTIDAD_DB_URL = os.environ["IDENTIDAD_DATABASE_URL"]
 RIESGO_DB_URL = os.environ["RIESGO_DATABASE_URL"]
 
 N_CLIENTES = int(os.getenv("SEED_N_CLIENTES", "10"))
+SEED_SCENARIO = os.getenv("SEED_SCENARIO", "baseline").lower()
+SEED_SEMILLA = int(os.getenv("SEED_SEED", "20240601"))
+SEED_ATTACK_RATIO = float(os.getenv("SEED_ATTACK_RATIO", "0.20"))
+
+random.seed(SEED_SEMILLA)
+fake = Faker("es_CO")
+fake.seed_instance(SEED_SEMILLA)
 
 VICTIMA_CUSTOMER_ID = "CLI-0001"
 ANALISTA_CUSTOMER_ID = "ANL-0001"
 ROLES = ["cliente_final", "analista_riesgo"]
 
+SCENARIOS = {
+    "baseline": {
+        "attack_ratio": 0.05,
+        "victim_ids": [VICTIMA_CUSTOMER_ID],
+        "suspicious_ids": [],
+    },
+    "attack": {
+        "attack_ratio": SEED_ATTACK_RATIO,
+        "victim_ids": [VICTIMA_CUSTOMER_ID],
+        "suspicious_ids": ["CLI-0002", "CLI-0003", "CLI-0004"],
+    },
+}
+
+
+def _scenario_config():
+    return SCENARIOS.get(SEED_SCENARIO, SCENARIOS["baseline"])
+
 
 def _conectar(url, intentos=15, espera_s=2):
     """Postgres puede tardar unos segundos en aceptar conexiones tras
     arrancar — depends_on solo espera a que el contenedor inicie, no a que
-    el servidor esté listo (mismo patrón de reintento que Celery/RabbitMQ
-    en el resto del proyecto).
+    el servidor esté listo.
     """
     for intento in range(1, intentos + 1):
         try:
@@ -54,10 +78,22 @@ def _categoria_para_score(score: int) -> str:
     return "BAJO"
 
 
+def _is_suspicious(customer_id: str) -> bool:
+    return customer_id in _scenario_config()["suspicious_ids"]
+
+
+def _pais_y_device(customer_id: str):
+    if _is_suspicious(customer_id):
+        return ("AR", f"device-{customer_id.lower()}-sospechoso")
+    return (
+        fake.country_code(representation="alpha-2"),
+        f"device-{customer_id.lower()}",
+    )
+
+
 def poblar_gestion_roles():
-    """Inserta al analista fijo y a los clientes finales, manteniendo un
-    customer_id de víctima reproducible y un esquema compatible con
-    ms-identidad/logica/modelos.py:Usuario.
+    """Inserta un analista fijo y clientes finales con un patrón
+    reproducible para escenario normal o atacante.
     """
     conn = _conectar(IDENTIDAD_DB_URL)
     try:
@@ -95,13 +131,14 @@ def poblar_gestion_roles():
                 )
             ]
             for customer_id in _cliente_ids():
+                pais_habitual, device_habitual = _pais_y_device(customer_id)
                 usuarios.append(
                     (
                         customer_id,
                         fake.name(),
                         "cliente_final",
-                        fake.country_code(representation="alpha-2"),
-                        f"device-{customer_id.lower()}",
+                        pais_habitual,
+                        device_habitual,
                     )
                 )
 
@@ -119,9 +156,9 @@ def poblar_gestion_roles():
 
 
 def poblar_perfil_riesgo():
-    """Genera perfiles dummy compatibles con ms-riesgo/logica/modelos.py.
-    Mantiene un cliente víctima reproducible y el mismo identificador del
-    flujo de seguridad para que el experimento sea consistente.
+    """Genera perfiles con un patrón reproducible: en baseline todos son
+    legítimos; en attack, se marcan clientes sospechosos con puntajes más
+    altos y categorías más riesgo para emular un lote con más ataques.
     """
     conn = _conectar(RIESGO_DB_URL)
     try:
@@ -141,7 +178,10 @@ def poblar_perfil_riesgo():
 
             perfiles = []
             for customer_id in [VICTIMA_CUSTOMER_ID, *[c for c in _cliente_ids() if c != VICTIMA_CUSTOMER_ID]]:
-                score = random.randint(20, 95)
+                if SEED_SCENARIO == "attack" and _is_suspicious(customer_id):
+                    score = random.randint(70, 95)
+                else:
+                    score = random.randint(20, 80)
                 perfiles.append(
                     (
                         customer_id,
@@ -170,4 +210,7 @@ def poblar_perfil_riesgo():
 if __name__ == "__main__":
     poblar_gestion_roles()
     poblar_perfil_riesgo()
-    print(f"seed: {len(_cliente_ids())} clientes y 1 analista sincronizados")
+    print(
+        f"seed: escenario={SEED_SCENARIO} ratio_ataques={_scenario_config()['attack_ratio']} "
+        f"clientes={len(_cliente_ids())}"
+    )
