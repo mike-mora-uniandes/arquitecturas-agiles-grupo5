@@ -14,4 +14,11 @@ class Config:
         "NOTIFICAR_INCIDENTE_TASK_NAME", "notificaciones.notificar_incidente"
     )
 
+    # Umbral de reacción (ASR3 confidencialidad / ASR4 integridad): notificar
+    # al analista en < 5 s desde la detección.
+    ASR_NOTIFICACION_UMBRAL_MS = float(
+        os.getenv("ASR_NOTIFICACION_UMBRAL_MS", "5000")
+    )
+
+    CELERY_CONCURRENCY = int(os.getenv("CELERY_CONCURRENCY", "1"))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

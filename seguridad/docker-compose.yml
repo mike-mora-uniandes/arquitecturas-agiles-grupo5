@@ -63,6 +63,8 @@ services:
   ms-identidad:
     <<: *ms-common
     build: ./ms-identidad
+    environment:
+      OTEL_SERVICE_NAME: ms-identidad
     ports:
       - "6001:5000"
     depends_on:
@@ -73,6 +75,8 @@ services:
   ms-cliente:
     <<: *ms-common
     build: ./ms-cliente
+    environment:
+      OTEL_SERVICE_NAME: ms-cliente
     ports:
       - "6002:5000"
     depends_on:
@@ -82,6 +86,8 @@ services:
   ms-riesgo:
     <<: *ms-common
     build: ./ms-riesgo
+    environment:
+      OTEL_SERVICE_NAME: ms-riesgo
     ports:
       - "6003:5000"
     depends_on:
@@ -92,6 +98,8 @@ services:
   ms-audit:
     <<: *ms-common
     build: ./ms-audit
+    environment:
+      OTEL_SERVICE_NAME: ms-audit
     ports:
       - "6004:5000"
     depends_on:
@@ -101,17 +109,22 @@ services:
   ms-notificaciones:
     <<: *ms-common
     build: ./ms-notificaciones
+    environment:
+      OTEL_SERVICE_NAME: ms-notificaciones
     ports:
       - "6005:5000"
     depends_on:
       - rabbitmq
 
+  # ----------------------------- Carga (Locust) -----------------------------
+  # Se levanta junto con el stack para ejecutar el experimento de seguridad con
+  # escenario reproducible. El valor por defecto es ataque; cambiarlo en
+  # SCENARIO si quieres correr baseline.
   locust:
     build: ./experimento
     volumes:
       - ./experimento:/mnt/locust:ro
     environment:
-      #SCENARIO: baseline
       SCENARIO: attack
       SECURITY_BASE_URL: http://ms-cliente:5000
       JWT_SECRET: change-me
@@ -121,3 +134,41 @@ services:
       - "8089:8089"
     depends_on:
       - ms-cliente
+
+  # ------------------- Observabilidad (perfil "experimento") -----------------
+  # Solo se levantan con `docker compose --profile experimento up`. El stack
+  # base (sin este perfil) corre el flujo funcional sin métricas. Mismo patrón
+  # y mismas imágenes que ../backend/ (experimento 1); puertos de host
+  # distintos para poder correr ambos experimentos a la vez.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    profiles: ["experimento"]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observabilidad/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4319:4318"     # OTLP http (4318 lo usa el experimento 1)
+      - "9465:9464"     # métricas expuestas para Prometheus
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: ["experimento"]
+    volumes:
+      - ./observabilidad/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: ["experimento"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus

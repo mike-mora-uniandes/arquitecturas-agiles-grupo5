@@ -1,0 +1,29 @@
+# Config del OpenTelemetry Collector para el experimento de seguridad.
+# Recibe OTLP de los microservicios (ms-audit, ms-notificaciones, ...) y
+# expone las métricas para Prometheus. Mismo patrón que
+# ../../backend/observabilidad/otel-collector.yaml (experimento 1).
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  debug:
+    verbosity: normal
+  prometheus:
+    endpoint: 0.0.0.0:9464
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, prometheus]
