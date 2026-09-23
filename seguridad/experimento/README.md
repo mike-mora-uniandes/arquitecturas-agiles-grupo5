@@ -17,28 +17,23 @@ Locust en http://localhost:8089 (escenario `attack` por defecto) o correr
 `forjar_token.py` para un disparo puntual. `ms-audit` clasifica la intrusión
 (BOLA o comportamiento anómalo vs. habitual) y `ms-notificaciones` notifica.
 
-## Integridad (ASR2/ASR4) — con mitmproxy
+## Integridad (ASR2/ASR4) — mitmproxy siempre en el camino
 
-El ataque altera el perfil en tránsito entre `ms-cliente` y `ms-riesgo`. Se
-levanta `mitmproxy` como reverse-proxy y se repunta `ms-cliente` a través de
-él con el override `../docker-compose.integridad.yml` (solo durante esta
-corrida, para no ensuciar el flujo normal):
+`mitmproxy` está **siempre** desplegado entre `ms-cliente` y `ms-riesgo`
+(simula el segmento de red comprometido); `ms-cliente` apunta a él por defecto.
+Altera solo una **fracción** de los perfiles en tránsito, controlada por
+`MITM_ATTACK_RATIO` en `.env`:
 
-```sh
-# activar el ataque de integridad
-docker compose -f docker-compose.yml -f docker-compose.integridad.yml \
-    up -d --force-recreate ms-cliente mitmproxy
+| `MITM_ATTACK_RATIO` | Efecto |
+|---|---|
+| `0` | passthrough — flujo funcional puro, sin integridad |
+| `0.2` (default) | ~20% de las respuestas se alteran → integridad se ejercita **junto** a confidencialidad en la misma corrida de Locust |
+| `1.0` | todo se altera → corrida dedicada de integridad |
 
-# cualquier petición a ms-cliente devuelve el perfil manipulado ->
-# el hash no coincide -> ms-cliente publica IntegridadFallida ->
-# ms-audit mide (ASR2) y ms-notificaciones notifica (ASR4)
-curl -s -XPOST http://localhost:6002/perfil-riesgo -H 'Content-Type: application/json' \
-  -d '{"token":"<jwt>","customer_id":"CLI-0005","ip":"10.0.0.5","device":"desktop-linux","pais":"CO"}'
-
-# volver al flujo normal (sin mitm)
-docker compose up -d --force-recreate ms-cliente
-docker compose stop mitmproxy
-```
+Así, **una sola corrida de Locust** ejercita los 4 ASR: la mayoría del tráfico
+pasa intacto (confidencialidad: BOLA / comportamiento) y la fracción alterada
+falla el hash → `ms-cliente` publica `IntegridadFallida` → `ms-audit` mide
+(ASR2) → `ms-notificaciones` notifica (ASR4).
 
 Evidencia: `docker compose logs ms-audit ms-notificaciones` (líneas
 `INTRUSION integridad` / `ASR4`) y `GET http://localhost:6004/incidentes`.

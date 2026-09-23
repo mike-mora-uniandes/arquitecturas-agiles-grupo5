@@ -15,16 +15,26 @@ al servicio real, solo durante la corrida del escenario de integridad.
 """
 import json
 import logging
+import os
+import random
 
 from mitmproxy import http
 
 
 log = logging.getLogger(__name__)
 
+# Fracción de respuestas de perfil que se alteran (0..1). Con < 1 permite una
+# sola corrida de Locust por el proxy donde la mayoría del tráfico pasa intacto
+# (ejercita confidencialidad) y solo esta fracción falla integridad (ASR2/ASR4).
+# 1.0 = alterar todo (corrida dedicada de integridad).
+ATTACK_RATIO = float(os.getenv("MITM_ATTACK_RATIO", "0.2"))
+
 
 def response(flow: http.HTTPFlow) -> None:
     if "/perfiles" not in flow.request.path:
         return
+    if random.random() >= ATTACK_RATIO:
+        return  # se deja pasar intacto
     try:
         payload = json.loads(flow.response.content)
     except (ValueError, TypeError):
