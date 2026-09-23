@@ -31,6 +31,9 @@ class HistorialConexion(Base):
     __tablename__ = "historial_conexion"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    # Correlación exacta con su extracción: ms-cliente genera un request_id por
+    # petición y lo propaga a ms-identidad y ms-riesgo (ver clasificador).
+    request_id = Column(String, nullable=True, index=True)
     customer_id_token = Column(String, nullable=True)
     customer_id_solicitado = Column(String, nullable=False, index=True)
     validado = Column(Boolean, nullable=False)
@@ -50,6 +53,7 @@ class HistorialRegistrosUsuario(Base):
     __tablename__ = "historial_registros_usuario"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    request_id = Column(String, nullable=True, index=True)
     customer_id = Column(String, nullable=False, index=True)
     reportado_en = Column(DateTime(timezone=True), nullable=False)
     registrado_en = Column(DateTime(timezone=True), nullable=False, default=_ahora)

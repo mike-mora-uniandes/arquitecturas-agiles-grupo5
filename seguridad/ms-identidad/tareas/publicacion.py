@@ -6,11 +6,12 @@ from extensiones import celery_app
 
 
 def publicar_reporte_sesion(
-    *, customer_id_token, customer_id_solicitado, validado, ip=None, device=None, pais=None
+    *, customer_id_token, customer_id_solicitado, validado,
+    ip=None, device=None, pais=None, request_id=None,
 ):
     """Publica el reporte de sesión/acción. Se llama en cada intento de
     ValidarUsuario, exitoso o rechazado — ms-audit necesita ambos para
-    correlacionar patrones.
+    correlacionar patrones. `request_id` empareja esta sesión con su extracción.
     """
     evento = {
         "customer_id_token": customer_id_token,
@@ -19,6 +20,7 @@ def publicar_reporte_sesion(
         "ip": ip,
         "device": device,
         "pais": pais,
+        "request_id": request_id,
         "reportado_en": datetime.now(timezone.utc).isoformat(),
     }
 
