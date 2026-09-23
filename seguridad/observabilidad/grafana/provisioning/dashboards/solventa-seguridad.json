@@ -524,6 +524,102 @@
           "expr": "100 * sum(solventa_seguridad_asr_notificacion_within_total{tipo=\"integridad\",pass=\"true\"}) / sum(solventa_seguridad_asr_notificacion_within_total{tipo=\"integridad\"})"
         }
       ]
+    },
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Trafico observado (clasificado por ms-audit)",
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 105,
+      "type": "bargauge",
+      "title": "Requests por clase (total)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 10,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      },
+      "targets": [
+        {
+          "expr": "sum by (clase) (solventa_seguridad_requests_total)",
+          "legendFormat": "{{clase}}"
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "type": "timeseries",
+      "title": "Tasa de requests por clase",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 37,
+        "w": 14,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (clase) (rate(solventa_seguridad_requests_total[1m]))",
+          "legendFormat": "{{clase}}"
+        }
+      ]
     }
   ]
 }

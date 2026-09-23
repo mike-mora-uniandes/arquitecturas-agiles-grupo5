@@ -43,6 +43,22 @@ def _historial_no_anomalo(session, actor: str, excluir_id):
     return consulta.all()
 
 
+def clasificar_trafico(session, sesion: HistorialConexion) -> str:
+    """Etiqueta la sesión por lo que ms-audit observa (para la mezcla de
+    tráfico del dashboard): 'rechazada', 'bola', 'anomala_comportamiento' o
+    'legitima'. Es una clasificación observada, no ground-truth.
+    """
+    if not sesion.validado:
+        return "rechazada"
+    if (
+        sesion.customer_id_token
+        and sesion.customer_id_token != sesion.customer_id_solicitado
+    ):
+        return "acceso_no_autorizado"
+    es_intrusion, _score, _motivos = evaluar(session, sesion)
+    return "anomala_comportamiento" if es_intrusion else "legitima"
+
+
 def evaluar(session, sesion: HistorialConexion):
     """Devuelve (es_intrusion: bool, score: float, motivos: list[str])."""
     motivos: list[str] = []
@@ -57,8 +73,9 @@ def evaluar(session, sesion: HistorialConexion):
         and sesion.customer_id_token != sesion.customer_id_solicitado
     ):
         motivos.append(
-            f"BOLA: token de '{sesion.customer_id_token}' usado para extraer "
-            f"el perfil de '{sesion.customer_id_solicitado}'"
+            f"acceso no autorizado (BOLA): token de "
+            f"'{sesion.customer_id_token}' usado para extraer el perfil de "
+            f"'{sesion.customer_id_solicitado}'"
         )
         return True, 1.0, motivos
 

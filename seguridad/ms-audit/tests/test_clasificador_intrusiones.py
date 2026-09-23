@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from logica.detector import evaluar
+from logica.detector import evaluar, clasificar_trafico
 from logica.clasificador_intrusiones import evaluar_request
 from logica.modelos import Base, HistorialConexion
 
@@ -111,3 +111,20 @@ def test_evaluar_request_empareja_por_id(session):
 
 def test_evaluar_request_sin_sesion(session):
     assert evaluar_request(session, "req-inexistente") == (None, None)
+
+
+def test_clasificar_trafico(session):
+    _historial_normal(session, actor="CLI-0002", n=5, pais="CO", device="desktop-linux")
+
+    rechazada = _conexion(validado=False)
+    no_autorizado = _conexion(customer_id_token="CLI-0002", customer_id_solicitado="CLI-0001")
+    anomala = _conexion(pais="US", device="device-nuevo")
+    legitima = _conexion(pais="CO", device="desktop-linux")
+    for c in (rechazada, no_autorizado, anomala, legitima):
+        session.add(c)
+    session.commit()
+
+    assert clasificar_trafico(session, rechazada) == "rechazada"
+    assert clasificar_trafico(session, no_autorizado) == "acceso_no_autorizado"
+    assert clasificar_trafico(session, anomala) == "anomala_comportamiento"
+    assert clasificar_trafico(session, legitima) == "legitima"
