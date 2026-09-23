@@ -1,32 +1,60 @@
-"""Puebla con datos dummy (Faker) las bases PostgreSQL del experimento:
-GestiónRoles (ms-identidad) y PerfilRiesgo (ms-riesgo).
+"""Puebla con datos dummy las bases PostgreSQL del experimento de seguridad.
 
-Idempotente: pensado para correr cada vez que se levanta el experimento
-desde cero (`docker compose up`), igual espíritu que backend/redis/seed en
-el experimento 1. Crea sus propias tablas (`CREATE TABLE IF NOT EXISTS`) en
-vez de depender del orden de arranque de los microservicios.
+La semilla es reproducible: se puede alternar entre dos escenarios
+configurados por variables de entorno:
+
+- baseline: tráfico mayoritariamente legítimo
+- attack: mezcla de tráfico legítimo + sospechoso para medir ASR1/ASR2
+
+Esto permite comparar el comportamiento del mismo flujo con dos perfiles de
+carga distintos sin depender del azar.
 """
 import os
+import random
 import time
+from datetime import datetime, timezone
 
 import psycopg2
 from faker import Faker
-
-fake = Faker("es_CO")
 
 IDENTIDAD_DB_URL = os.environ["IDENTIDAD_DATABASE_URL"]
 RIESGO_DB_URL = os.environ["RIESGO_DATABASE_URL"]
 
 N_CLIENTES = int(os.getenv("SEED_N_CLIENTES", "10"))
+SEED_SCENARIO = os.getenv("SEED_SCENARIO", "baseline").lower()
+SEED_SEMILLA = int(os.getenv("SEED_SEED", "20240601"))
+SEED_ATTACK_RATIO = float(os.getenv("SEED_ATTACK_RATIO", "0.20"))
 
-ROLES = ["cliente_final", "cliente_final", "cliente_final", "analista_riesgo"]
+random.seed(SEED_SEMILLA)
+fake = Faker("es_CO")
+fake.seed_instance(SEED_SEMILLA)
+
+VICTIMA_CUSTOMER_ID = "CLI-0001"
+ANALISTA_CUSTOMER_ID = "ANL-0001"
+ROLES = ["cliente_final", "analista_riesgo"]
+
+SCENARIOS = {
+    "baseline": {
+        "attack_ratio": 0.05,
+        "victim_ids": [VICTIMA_CUSTOMER_ID],
+        "suspicious_ids": [],
+    },
+    "attack": {
+        "attack_ratio": SEED_ATTACK_RATIO,
+        "victim_ids": [VICTIMA_CUSTOMER_ID],
+        "suspicious_ids": ["CLI-0002", "CLI-0003", "CLI-0004"],
+    },
+}
+
+
+def _scenario_config():
+    return SCENARIOS.get(SEED_SCENARIO, SCENARIOS["baseline"])
 
 
 def _conectar(url, intentos=15, espera_s=2):
     """Postgres puede tardar unos segundos en aceptar conexiones tras
     arrancar — depends_on solo espera a que el contenedor inicie, no a que
-    el servidor esté listo (mismo patrón de reintento que Celery/RabbitMQ
-    en el resto del proyecto).
+    el servidor esté listo.
     """
     for intento in range(1, intentos + 1):
         try:
@@ -38,43 +66,151 @@ def _conectar(url, intentos=15, espera_s=2):
             time.sleep(espera_s)
 
 
+def _cliente_ids():
+    return [f"CLI-{indice:04d}" for indice in range(1, N_CLIENTES + 1)]
+
+
+def _categoria_para_score(score: int) -> str:
+    if score >= 66:
+        return "ALTO"
+    if score >= 34:
+        return "MEDIO"
+    return "BAJO"
+
+
+def _is_suspicious(customer_id: str) -> bool:
+    return customer_id in _scenario_config()["suspicious_ids"]
+
+
+def _pais_y_device(customer_id: str):
+    if _is_suspicious(customer_id):
+        return ("AR", f"device-{customer_id.lower()}-sospechoso")
+    return (
+        fake.country_code(representation="alpha-2"),
+        f"device-{customer_id.lower()}",
+    )
+
+
 def poblar_gestion_roles():
-    """usuarios(customer_id, nombre, rol) — mismo esquema que
-    ms-identidad/logica/modelos.py:Usuario.
+    """Inserta un analista fijo y clientes finales con un patrón
+    reproducible para escenario normal o atacante.
     """
     conn = _conectar(IDENTIDAD_DB_URL)
     try:
         with conn, conn.cursor() as cur:
             cur.execute(
                 """
-                CREATE TABLE IF NOT EXISTS usuarios (
-                    customer_id VARCHAR PRIMARY KEY,
-                    nombre VARCHAR NOT NULL,
-                    rol VARCHAR NOT NULL
+                CREATE TABLE IF NOT EXISTS roles (
+                    nombre TEXT PRIMARY KEY
                 )
                 """
             )
-            for i in range(1, N_CLIENTES + 1):
-                customer_id = f"CLI-{i:04d}"
-                cur.execute(
-                    """
-                    INSERT INTO usuarios (customer_id, nombre, rol)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (customer_id) DO NOTHING
-                    """,
-                    (customer_id, fake.name(), fake.random_element(ROLES)),
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    customer_id TEXT PRIMARY KEY,
+                    nombre TEXT NOT NULL,
+                    rol TEXT NOT NULL REFERENCES roles(nombre),
+                    pais_habitual TEXT NOT NULL,
+                    device_habitual TEXT NOT NULL
                 )
+                """
+            )
+            cur.executemany(
+                "INSERT INTO roles (nombre) VALUES (%s) ON CONFLICT DO NOTHING",
+                [("cliente_final",), ("analista_riesgo",)],
+            )
+
+            usuarios = [
+                (
+                    ANALISTA_CUSTOMER_ID,
+                    fake.name(),
+                    "analista_riesgo",
+                    "CO",
+                    "analista-console",
+                )
+            ]
+            for customer_id in _cliente_ids():
+                pais_habitual, device_habitual = _pais_y_device(customer_id)
+                usuarios.append(
+                    (
+                        customer_id,
+                        fake.name(),
+                        "cliente_final",
+                        pais_habitual,
+                        device_habitual,
+                    )
+                )
+
+            cur.executemany(
+                """
+                INSERT INTO usuarios (
+                    customer_id, nombre, rol, pais_habitual, device_habitual
+                ) VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (customer_id) DO NOTHING
+                """,
+                usuarios,
+            )
     finally:
         conn.close()
 
 
 def poblar_perfil_riesgo():
-    # TODO: pendiente de que ms-riesgo defina su esquema de PerfilRiesgo
-    # (score, categoría, datos personales, etc.) — coordinarlo con Jeffrey.
-    pass
+    """Genera perfiles con un patrón reproducible: en baseline todos son
+    legítimos; en attack, se marcan clientes sospechosos con puntajes más
+    altos y categorías más riesgo para emular un lote con más ataques.
+    """
+    conn = _conectar(RIESGO_DB_URL)
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS perfiles_riesgo (
+                    customer_id TEXT PRIMARY KEY,
+                    nombre_completo TEXT NOT NULL,
+                    documento_identidad TEXT NOT NULL,
+                    puntaje INTEGER NOT NULL,
+                    categoria TEXT NOT NULL,
+                    actualizado_en TIMESTAMP NOT NULL
+                )
+                """
+            )
+
+            perfiles = []
+            for customer_id in [VICTIMA_CUSTOMER_ID, *[c for c in _cliente_ids() if c != VICTIMA_CUSTOMER_ID]]:
+                if SEED_SCENARIO == "attack" and _is_suspicious(customer_id):
+                    score = random.randint(70, 95)
+                else:
+                    score = random.randint(20, 80)
+                perfiles.append(
+                    (
+                        customer_id,
+                        fake.name(),
+                        str(fake.random_number(digits=8, fix_len=True)),
+                        score,
+                        _categoria_para_score(score),
+                        datetime.now(timezone.utc),
+                    )
+                )
+
+            cur.executemany(
+                """
+                INSERT INTO perfiles_riesgo (
+                    customer_id, nombre_completo, documento_identidad,
+                    puntaje, categoria, actualizado_en
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (customer_id) DO NOTHING
+                """,
+                perfiles,
+            )
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
     poblar_gestion_roles()
     poblar_perfil_riesgo()
-    print(f"seed: {N_CLIENTES} usuarios dummy generados en GestiónRoles")
+    print(
+        f"seed: escenario={SEED_SCENARIO} ratio_ataques={_scenario_config()['attack_ratio']} "
+        f"clientes={len(_cliente_ids())}"
+    )
