@@ -68,9 +68,15 @@ services:
     ports:
       - "6001:5000"
     depends_on:
-      - rabbitmq
-      - ms-identidad-db
-      - seed
+      rabbitmq:
+        condition: service_started
+      ms-identidad-db:
+        condition: service_started
+      # Esperar a que el seed TERMINE (no solo que arranque): así el seed crea
+      # las tablas con su esquema y las puebla antes de que este servicio haga
+      # create_all, evitando la carrera de esquemas en `usuarios`.
+      seed:
+        condition: service_completed_successfully
 
   ms-cliente:
     <<: *ms-common
@@ -91,9 +97,13 @@ services:
     ports:
       - "6003:5000"
     depends_on:
-      - rabbitmq
-      - ms-riesgo-db
-      - seed
+      rabbitmq:
+        condition: service_started
+      ms-riesgo-db:
+        condition: service_started
+      # Esperar a que el seed TERMINE antes de create_all (ver ms-identidad).
+      seed:
+        condition: service_completed_successfully
 
   ms-audit:
     <<: *ms-common

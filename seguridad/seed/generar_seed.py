@@ -116,6 +116,19 @@ def poblar_gestion_roles():
                 )
                 """
             )
+            # Auto-reparación: si ms-identidad ganó la carrera de arranque y
+            # creó `usuarios` con su propio modelo (customer_id/nombre/rol, sin
+            # pais_habitual/device_habitual), el CREATE de arriba es no-op y el
+            # INSERT de abajo fallaría por columnas inexistentes. Estas dos
+            # sentencias garantizan que las columnas existan gane quien gane la
+            # carrera. Son nullable a propósito: ms-identidad no las conoce y no
+            # las escribe, pero el seed sí las puebla en el mismo INSERT.
+            cur.execute(
+                "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pais_habitual TEXT"
+            )
+            cur.execute(
+                "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS device_habitual TEXT"
+            )
             cur.executemany(
                 "INSERT INTO roles (nombre) VALUES (%s) ON CONFLICT DO NOTHING",
                 [("cliente_final",), ("analista_riesgo",)],
