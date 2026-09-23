@@ -1,0 +1,38 @@
+# Override para el escenario de INTEGRIDAD (ASR2/ASR4).
+#
+# Levanta mitmproxy como reverse-proxy delante de ms-riesgo y repunta
+# ms-cliente a través de él, para materializar la alteración del perfil en
+# tránsito (ver experimento/mitm_alterar_perfil.py). Se usa SOLO durante la
+# corrida de integridad, para no ensuciar el flujo normal:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.integridad.yml \
+#       up -d --force-recreate ms-cliente mitmproxy
+#
+# Cualquier petición a ms-cliente devolverá el perfil manipulado -> el hash no
+# coincide -> ms-cliente publica IntegridadFallida -> ms-audit mide y notifica.
+#
+# Para volver al flujo normal (sin mitm):
+#   docker compose up -d --force-recreate ms-cliente
+
+services:
+  mitmproxy:
+    image: mitmproxy/mitmproxy:10.4.2
+    command: >
+      mitmdump -s /addon/mitm_alterar_perfil.py
+      --mode reverse:http://ms-riesgo:5000
+      --listen-port 8081
+      --set connection_strategy=lazy
+    volumes:
+      - ./experimento:/addon:ro
+    depends_on:
+      - ms-riesgo
+
+  ms-cliente:
+    environment:
+      OTEL_SERVICE_NAME: ms-cliente
+      # Repunta a ms-riesgo a través del proxy que altera el perfil.
+      MS_RIESGO_URL: http://mitmproxy:8081
+    depends_on:
+      - ms-identidad
+      - ms-riesgo
+      - mitmproxy

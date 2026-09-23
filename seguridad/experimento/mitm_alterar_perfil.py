@@ -25,17 +25,24 @@ log = logging.getLogger(__name__)
 def response(flow: http.HTTPFlow) -> None:
     if "/perfiles" not in flow.request.path:
         return
-    # Altera el score del perfil sin tocar un eventual hash de integridad,
-    # para dejar evidencia de manipulación en tránsito.
-    payload = json.loads(flow.response.content)
-    score_original = payload.get("score")
-    payload["score"] = 999
+    try:
+        payload = json.loads(flow.response.content)
+    except (ValueError, TypeError):
+        return
+    # Altera el `puntaje` del perfil (el campo real que entrega ms-riesgo)
+    # SIN recalcular el hash_integridad, dejando evidencia de manipulación en
+    # tránsito. ValidadorIntegridad (ms-cliente) recalcula el hash sobre el
+    # payload alterado, no coincide, y detecta la intrusión (ASR2).
+    if "puntaje" not in payload:
+        return
+    puntaje_original = payload["puntaje"]
+    payload["puntaje"] = 999  # valor imposible (escala 0-100): evidencia clara
     flow.response.content = json.dumps(payload).encode("utf-8")
 
     customer_id = payload.get("customer_id", "desconocido")
     log.warning(
-        "MITM altero perfil de customer_id=%s score_original=%s score_nuevo=%s",
+        "MITM altero perfil de customer_id=%s puntaje_original=%s puntaje_nuevo=%s",
         customer_id,
-        score_original,
-        payload["score"],
+        puntaje_original,
+        payload["puntaje"],
     )

@@ -14,7 +14,7 @@ del kernel y las restas entre servicios son comparables — ver README):
   y la reporta en `deteccion_ms`; ms-audit solo la centraliza como métrica.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import telemetria
 from config import Config
@@ -142,6 +142,25 @@ def registrar_integridad_fallida(self, evento):
         Session.remove()
 
 
+def _incidente_confidencialidad_reciente(session, customer_id, referencia):
+    """True si ya existe un incidente de confidencialidad para `customer_id`
+    dentro de la ventana de correlación. Evita duplicar el incidente cuando
+    hay varias extracciones del mismo cliente en la misma ventana (una sesión
+    sospechosa correlaciona con cada una).
+    """
+    ventana = timedelta(seconds=Config.VENTANA_CORRELACION_S)
+    return (
+        session.query(Incidente)
+        .filter(
+            Incidente.tipo == "confidencialidad",
+            Incidente.customer_id == customer_id,
+            Incidente.detectado_en >= referencia - ventana,
+        )
+        .first()
+        is not None
+    )
+
+
 def _correlacionar_confidencialidad(session, customer_id: str):
     """Busca una extracción no incidentada de `customer_id` que cruce con una
     sesión sospechosa; si la encuentra, levanta el incidente de
@@ -162,8 +181,14 @@ def _correlacionar_confidencialidad(session, customer_id: str):
     ahora = datetime.now(timezone.utc)
     deteccion_ms = (ahora - extraccion.reportado_en).total_seconds() * 1000.0
 
+    # Marcar la extracción evita reprocesarla; el chequeo de ventana evita
+    # levantar un segundo incidente por el mismo patrón (otra extracción del
+    # mismo cliente correlacionando con la misma sesión sospechosa).
     extraccion.incidentado = True
     session.commit()
+
+    if _incidente_confidencialidad_reciente(session, customer_id, ahora):
+        return
 
     _registrar_incidente(
         session,
