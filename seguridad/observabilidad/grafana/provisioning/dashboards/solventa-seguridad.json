@@ -32,6 +32,7 @@
       "id": 1,
       "type": "stat",
       "title": "Intrusiones detectadas (total)",
+      "description": "Confidencialidad + integridad juntas. Ver el desglose por tipo en los dos paneles de la derecha.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -39,7 +40,7 @@
       "gridPos": {
         "x": 0,
         "y": 1,
-        "w": 8,
+        "w": 6,
         "h": 8
       },
       "fieldConfig": {
@@ -73,17 +74,18 @@
       ]
     },
     {
-      "id": 105,
-      "type": "bargauge",
-      "title": "Requests por clase (total)",
+      "id": 110,
+      "type": "stat",
+      "title": "Requests procesadas (total)",
+      "description": "Todas las peticiones que ms-audit evaluó, sean o no intrusion. Denominador para leer los otros 3 numeros de esta fila.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 8,
+        "x": 6,
         "y": 1,
-        "w": 8,
+        "w": 6,
         "h": 8
       },
       "fieldConfig": {
@@ -93,7 +95,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "text",
                 "value": null
               }
             ]
@@ -108,27 +110,27 @@
           ]
         },
         "orientation": "horizontal",
-        "displayMode": "gradient"
+        "textMode": "auto"
       },
       "targets": [
         {
-          "expr": "sum by (clase) (solventa_seguridad_requests_total)",
-          "legendFormat": "{{clase}}"
+          "expr": "sum(solventa_seguridad_requests_total)"
         }
       ]
     },
     {
-      "id": 2,
-      "type": "bargauge",
-      "title": "Intrusiones por tipo",
+      "id": 111,
+      "type": "stat",
+      "title": "Incidentes de confidencialidad",
+      "description": "BOLA (acceso_no_autorizado) + comportamiento anomalo, sumados. Detalle de la clasificacion en 'Trafico observado', al final del dashboard.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "x": 16,
+        "x": 12,
         "y": 1,
-        "w": 8,
+        "w": 6,
         "h": 8
       },
       "fieldConfig": {
@@ -153,12 +155,58 @@
           ]
         },
         "orientation": "horizontal",
-        "displayMode": "gradient"
+        "textMode": "auto",
+        "colorMode": "value"
       },
       "targets": [
         {
-          "expr": "sum by (tipo) (solventa_seguridad_intrusiones_total)",
-          "legendFormat": "{{tipo}}"
+          "expr": "sum(solventa_seguridad_intrusiones_total{tipo=\"confidencialidad\"})"
+        }
+      ]
+    },
+    {
+      "id": 112,
+      "type": "stat",
+      "title": "Incidentes de integridad",
+      "description": "Hash de perfil alterado en transito (mitmproxy), detectado inline por ms-cliente. No forma parte de la clasificacion de 'Requests por clase'.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "sum(solventa_seguridad_intrusiones_total{tipo=\"integridad\"})"
         }
       ]
     },
@@ -584,6 +632,52 @@
       "panels": []
     },
     {
+      "id": 105,
+      "type": "bargauge",
+      "title": "Requests por clase (total)",
+      "description": "Desglose de 'Incidentes de confidencialidad' del resumen: acceso_no_autorizado + anomala_comportamiento son los que generan incidente; legitima y rechazada no.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      },
+      "targets": [
+        {
+          "expr": "sum by (clase) (solventa_seguridad_requests_total)",
+          "legendFormat": "{{clase}}"
+        }
+      ]
+    },
+    {
       "id": 106,
       "type": "timeseries",
       "title": "Tasa de requests por clase",
@@ -593,7 +687,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 43,
         "w": 24,
         "h": 8
       },
