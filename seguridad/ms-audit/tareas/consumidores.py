@@ -20,6 +20,7 @@ import telemetria
 from config import Config
 from extensiones import Session, celery_app
 from logica.clasificador_intrusiones import evaluar_request
+from logica.detector import clasificar_trafico
 from logica.modelos import (
     HistorialConexion,
     HistorialRegistrosUsuario,
@@ -80,19 +81,23 @@ def registrar_sesion_accion(self, evento):
     log.info("ReporteSesionAccion recibido: %s", evento)
     session = Session()
     try:
-        session.add(
-            HistorialConexion(
-                request_id=evento.get("request_id"),
-                customer_id_token=evento.get("customer_id_token"),
-                customer_id_solicitado=evento["customer_id_solicitado"],
-                validado=bool(evento.get("validado")),
-                ip=evento.get("ip"),
-                device=evento.get("device"),
-                pais=evento.get("pais"),
-                reportado_en=_parse_ts(evento["reportado_en"]),
-            )
+        conexion = HistorialConexion(
+            request_id=evento.get("request_id"),
+            customer_id_token=evento.get("customer_id_token"),
+            customer_id_solicitado=evento["customer_id_solicitado"],
+            validado=bool(evento.get("validado")),
+            ip=evento.get("ip"),
+            device=evento.get("device"),
+            pais=evento.get("pais"),
+            reportado_en=_parse_ts(evento["reportado_en"]),
         )
+        session.add(conexion)
         session.commit()
+
+        # Mezcla de tráfico observado (para el dashboard).
+        clase = clasificar_trafico(session, conexion)
+        telemetria.requests_total.add(1, {"clase": clase})
+
         # La extracción de esta request pudo llegar antes que su sesión.
         _correlacionar_request(session, evento.get("request_id"))
     finally:
@@ -157,8 +162,8 @@ def _correlacionar_request(session, request_id: str):
     if not request_id:
         return
 
-    motivo = evaluar_request(session, request_id)
-    if motivo is None:
+    sesion, motivo = evaluar_request(session, request_id)
+    if sesion is None:
         # La sesión aún no llegó, o no es sospechosa: nada que hacer (si llega
         # después, el consumidor de sesión reevaluará esta request).
         return
@@ -177,6 +182,9 @@ def _correlacionar_request(session, request_id: str):
     deteccion_ms = (ahora - extraccion.reportado_en).total_seconds() * 1000.0
 
     extraccion.incidentado = True
+    # Marca la conexión como anómala → queda excluida del cálculo del
+    # comportamiento normal del actor (evita envenenar la línea base).
+    sesion.anomala = True
     session.commit()
 
     _registrar_incidente(

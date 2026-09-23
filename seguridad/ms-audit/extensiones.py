@@ -83,11 +83,54 @@ Session = scoped_session(sessionmaker(bind=engine))
 
 
 def inicializar_bd():
-    """Espera a Postgres y crea las tablas si no existen. Idempotente."""
+    """Espera a Postgres, crea las tablas y siembra el historial normal inicial
+    si está vacío. Idempotente.
+    """
     from logica.modelos import Base  # import diferido: evita ciclo con modelos
 
     esperar_bd(engine)
     Base.metadata.create_all(engine)
+    _autosembrar_historial_normal()
+
+
+def _autosembrar_historial_normal():
+    """Da una línea base de comportamiento desde la primera request: inserta
+    unas conexiones legítimas por cliente (país/device habitual) SOLO si el
+    historial está vacío. Respaldo del seed, que también llena esta tabla; el
+    guard por "vacío" evita duplicar cuando ambos corren. ms-audit es dueño de
+    su esquema, así que sembrar aquí no lo acopla a la seed.
+    """
+    from datetime import datetime, timezone
+
+    from logica.modelos import HistorialConexion
+
+    session = Session()
+    try:
+        if session.query(HistorialConexion.id).first() is not None:
+            return  # ya hay historial (lo llenó el seed o una corrida previa)
+
+        ahora = datetime.now(timezone.utc)
+        filas = []
+        for indice in range(1, Config.AUTOSEED_N_CLIENTES + 1):
+            cid = f"CLI-{indice:04d}"
+            for _ in range(Config.AUTOSEED_CONEXIONES):
+                filas.append(
+                    HistorialConexion(
+                        request_id=None,
+                        customer_id_token=cid,
+                        customer_id_solicitado=cid,
+                        validado=True,
+                        ip="10.0.0.5",
+                        device=Config.AUTOSEED_DEVICE,
+                        pais=Config.AUTOSEED_PAIS,
+                        reportado_en=ahora,
+                        anomala=False,
+                    )
+                )
+        session.add_all(filas)
+        session.commit()
+    finally:
+        Session.remove()
 
 
 @worker_init.connect(weak=False)

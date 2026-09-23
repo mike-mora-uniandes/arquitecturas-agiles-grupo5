@@ -58,15 +58,26 @@ class Config:
     # ASR2 (integridad): detectar la alteración no autorizada en < 500 ms.
     ASR2_UMBRAL_MS = float(os.getenv("ASR2_UMBRAL_MS", "500"))
 
-    # --- Señales del clasificador de intrusiones (Detect Intrusion) ---
-    # La anomalía de comportamiento se decide comparando el país/device de la
-    # request contra el habitual del actor (tabla comportamiento_habitual,
-    # sembrada por seed/), no contra una lista estática. Ver
-    # logica/clasificador_intrusiones.py.
+    # --- Detector heurístico de intrusiones (Detect Intrusion) ---
+    # La anomalía de comportamiento se calcula como una PROBABILIDAD frecuencial
+    # sobre el historial NO anómalo del actor (logica/detector.py): P(normal) =
+    # P(país)·P(device) con suavizado de Laplace; score = 1 - P(normal).
+    # BOLA es una señal determinista aparte (peso máximo). Ver detector.py.
+    DETECCION_UMBRAL = float(os.getenv("DETECCION_UMBRAL", "0.7"))
+    DETECCION_ALPHA = float(os.getenv("DETECCION_ALPHA", "1.0"))  # suavizado Laplace
+    # Mínimo de conexiones no anómalas del actor para confiar en la señal de
+    # comportamiento; por debajo, solo aplica BOLA (evita sobre-marcar con
+    # historial escaso).
+    DETECCION_MIN_MUESTRAS = int(os.getenv("DETECCION_MIN_MUESTRAS", "3"))
 
-    # Ventana de correlación: una sesión sospechosa y una extracción se
-    # consideran parte del mismo patrón si ocurren dentro de esta ventana.
-    VENTANA_CORRELACION_S = int(os.getenv("VENTANA_CORRELACION_S", "60"))
+    # --- Auto-siembra del historial normal inicial (arranque en frío) ---
+    # ms-audit siembra su propio historial normal al arrancar SOLO si la tabla
+    # está vacía (respaldo del seed, que también la llena). Da una línea base
+    # desde la primera request sin acoplar la seed al esquema de ms-audit.
+    AUTOSEED_N_CLIENTES = int(os.getenv("AUTOSEED_N_CLIENTES", "10"))
+    AUTOSEED_CONEXIONES = int(os.getenv("AUTOSEED_CONEXIONES", "5"))
+    AUTOSEED_PAIS = os.getenv("AUTOSEED_PAIS", "CO")
+    AUTOSEED_DEVICE = os.getenv("AUTOSEED_DEVICE", "desktop-linux")
 
     CELERY_CONCURRENCY = int(os.getenv("CELERY_CONCURRENCY", "2"))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

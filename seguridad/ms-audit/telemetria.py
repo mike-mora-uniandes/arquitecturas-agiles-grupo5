@@ -59,6 +59,12 @@ def _crear_instrumentos(meter):
             "solventa_seguridad_intrusiones_total", unit="1",
             description="Intrusiones clasificadas por ms-audit, por tipo",
         ),
+        # Mezcla de tráfico observado por ms-audit, por clase (legitima,
+        # acceso_no_autorizado, anomala_comportamiento, rechazada).
+        "requests_total": meter.create_counter(
+            "solventa_seguridad_requests_total", unit="1",
+            description="Requests observadas por ms-audit, por clase de tráfico",
+        ),
     }
 
 

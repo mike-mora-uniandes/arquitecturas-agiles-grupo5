@@ -19,31 +19,45 @@ autorizada del perfil (confidencialidad, ASR1) o una alteración del perfil
 | BD | PostgreSQL `audit`: `historial_conexion`, `historial_registros_usuario`, `incidentes` |
 | API | `GET /incidentes` (últimos 100, evidencia) · `GET /salud` |
 
-## Detección de confidencialidad (ASR1) — camino asíncrono
+## Detección de confidencialidad (ASR1) — detector heurístico
 
-`logica/clasificador_intrusiones.py` correlaciona el `ReporteSesionAccion` con
-el `ReporteExtraccionPerfilRiesgoCliente` del mismo `customer_id` dentro de una
-ventana. Una sesión es sospechosa si (basta una señal):
+Cada request es una extracción: su `ReporteSesionAccion` y su
+`ReporteExtraccionPerfilRiesgoCliente` comparten un `request_id`
+(`logica/clasificador_intrusiones.py` los empareja por ese id, exacto). La
+decisión la toma el **detector heurístico** (`logica/detector.py`), que combina
+dos señales:
 
-1. **BOLA** — sesión validada donde `customer_id_token != customer_id_solicitado`
-   (la vulnerabilidad deliberada de `ms-identidad`: un token válido para un
-   cliente usado para extraer el perfil de otro).
-2. **Contexto anómalo** — `pais` o `device` en la lista de bloqueo
-   (`PAISES_ANOMALOS` / `DEVICES_ANOMALOS`; dummy del atacante: `IR`,
-   `unknown-device`). Cubre el caso en que el atacante forja un token que se
-   hace pasar por la propia víctima (sin mismatch), detectable solo por su
-   origen.
+1. **BOLA** (determinista, peso máximo) — sesión validada donde
+   `customer_id_token != customer_id_solicitado` (la vulnerabilidad deliberada
+   de `ms-identidad`: un token válido para un cliente usado para extraer el
+   perfil de otro).
+2. **Comportamiento** (probabilístico) — qué tan improbable es el `país`/`device`
+   de la request dado el **historial NO anómalo del actor**:
 
-> **Nota de coordinación (equipo):** las dos señales existen a propósito para
-> cubrir las dos formas en que hoy se materializa el ataque entre ramas —
-> `experimento/forjar_token.py` (token = víctima → se detecta por contexto) y
-> la narrativa BOLA de `ms-identidad` (token ≠ solicitado). Si el equipo unifica
-> el ataque en una sola forma, se puede simplificar el clasificador.
+   ```
+   P(país)   = (veces(país)   + α) / (N + α·(distintos_país   + 1))
+   P(device) = (veces(device) + α) / (N + α·(distintos_device + 1))
+   P(normal) = P(país)·P(device)     ;  score = 1 − P(normal)
+   intrusión  si  score ≥ DETECCION_UMBRAL
+   ```
 
-**Medición ASR1:** `t0` = `reportado_en` de la extracción (momento en que se
-completó la extracción); `t1` = momento de la clasificación en `ms-audit`. La
-resta es la latencia del camino asíncrono (publicar → broker → consumir →
-clasificar) — el punto de incertidumbre del diseño frente al umbral de 200 ms.
+El "normal" se **deriva del propio `historial_conexion`** (no de una tabla
+aparte): las conexiones marcadas `anomala = true` se **excluyen** para que el
+tráfico del atacante no envenene la línea base. El suavizado de Laplace (α)
+evita ceros duros y sobre-marcar con historial escaso; con menos de
+`DETECCION_MIN_MUESTRAS` conexiones del actor solo aplica BOLA. Esto detecta el
+caso de un **usuario legítimo desde ubicación/device inusual** (que un BOLA no
+cubre) y tolera **patrones múltiples legítimos** (p. ej. un cliente que alterna
+dos países), a diferencia de un match exacto.
+
+**Arranque en frío:** el historial normal inicial lo llena el `seed/` en
+`historial_conexion`, y `ms-audit` lo **auto-siembra** como respaldo si la tabla
+está vacía (`AUTOSEED_*`), sin acoplar la seed a su esquema.
+
+**Medición ASR1:** `t0` = `reportado_en` de la extracción; `t1` = momento de la
+clasificación en `ms-audit`. La resta es la latencia del camino asíncrono
+(publicar → broker → consumir → clasificar) — el punto de incertidumbre del
+diseño frente al umbral de 200 ms.
 
 ## Detección de integridad (ASR2) — inline en ms-cliente
 

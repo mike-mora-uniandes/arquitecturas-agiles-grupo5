@@ -34,7 +34,7 @@ class HistorialConexion(Base):
     # Correlación exacta con su extracción: ms-cliente genera un request_id por
     # petición y lo propaga a ms-identidad y ms-riesgo (ver clasificador).
     request_id = Column(String, nullable=True, index=True)
-    customer_id_token = Column(String, nullable=True)
+    customer_id_token = Column(String, nullable=True, index=True)
     customer_id_solicitado = Column(String, nullable=False, index=True)
     validado = Column(Boolean, nullable=False)
     ip = Column(String, nullable=True)
@@ -42,6 +42,9 @@ class HistorialConexion(Base):
     pais = Column(String, nullable=True)
     reportado_en = Column(DateTime(timezone=True), nullable=False)
     registrado_en = Column(DateTime(timezone=True), nullable=False, default=_ahora)
+    # Marcada como intrusión → se EXCLUYE del cálculo del comportamiento normal
+    # del actor, para que el tráfico del atacante no envenene la línea base.
+    anomala = Column(Boolean, nullable=False, default=False, index=True)
 
 
 class HistorialRegistrosUsuario(Base):
@@ -58,22 +61,6 @@ class HistorialRegistrosUsuario(Base):
     reportado_en = Column(DateTime(timezone=True), nullable=False)
     registrado_en = Column(DateTime(timezone=True), nullable=False, default=_ahora)
     incidentado = Column(Boolean, nullable=False, default=False)
-
-
-class ComportamientoHabitual(Base):
-    """Línea base del comportamiento normal de cada cliente (país/device
-    habitual). Es dato de referencia sembrado por seed/ (no un evento de
-    runtime), y lo usa el clasificador para marcar como anómala una sesión
-    cuyo país/device difiere del habitual del actor (Detect Intrusion por
-    comportamiento). Puede no existir para un actor desconocido: en ese caso
-    no hay señal de comportamiento (se cae a BOLA).
-    """
-
-    __tablename__ = "comportamiento_habitual"
-
-    customer_id = Column(String, primary_key=True)
-    pais_habitual = Column(String, nullable=True)
-    device_habitual = Column(String, nullable=True)
 
 
 class Incidente(Base):
