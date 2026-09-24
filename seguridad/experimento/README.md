@@ -14,8 +14,18 @@ levantado, igual que se hizo con las pruebas manuales del experimento 1.
 
 Con el stack arriba (`docker compose --profile experimento up -d`), abrir
 Locust en http://localhost:8089 (escenario `attack` por defecto) o correr
-`forjar_token.py` para un disparo puntual. `ms-audit` clasifica la intrusión
-(BOLA o comportamiento anómalo vs. habitual) y `ms-notificaciones` notifica.
+`forjar_token.py` para un disparo puntual contra `ms-cliente`
+(`POST /perfil-riesgo`, mismo contrato que usa Locust):
+
+```sh
+cd experimento
+pip install -r requirements.txt
+python forjar_token.py            # ataca CLI-0001 con un token forjado de CLI-0002
+```
+
+`ms-audit` clasifica la intrusión (BOLA o comportamiento anómalo vs.
+habitual) y `ms-notificaciones` notifica; el script imprime dónde ver la
+evidencia (`GET http://localhost:6004/incidentes` o los logs).
 
 ## Integridad (ASR2/ASR4) — mitmproxy siempre en el camino
 
