@@ -32,6 +32,7 @@
       "id": 1,
       "type": "stat",
       "title": "Intrusiones detectadas (total)",
+      "description": "Confidencialidad + integridad juntas. Ver el desglose por tipo en los dos paneles de la derecha.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -39,7 +40,7 @@
       "gridPos": {
         "x": 0,
         "y": 1,
-        "w": 8,
+        "w": 4,
         "h": 8
       },
       "fieldConfig": {
@@ -73,9 +74,55 @@
       ]
     },
     {
-      "id": 105,
-      "type": "bargauge",
-      "title": "Requests por clase (total)",
+      "id": 110,
+      "type": "stat",
+      "title": "Requests procesadas (total)",
+      "description": "Todas las peticiones que ms-audit evaluó, sean o no intrusion. Denominador para leer los otros numeros de esta fila.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(solventa_seguridad_requests_total)"
+        }
+      ]
+    },
+    {
+      "id": 111,
+      "type": "stat",
+      "title": "Incidentes de confidencialidad",
+      "description": "BOLA (acceso_no_autorizado) + comportamiento anomalo, sumados. Detalle de la clasificacion en 'Trafico observado', al final del dashboard.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -83,7 +130,7 @@
       "gridPos": {
         "x": 8,
         "y": 1,
-        "w": 8,
+        "w": 4,
         "h": 8
       },
       "fieldConfig": {
@@ -108,19 +155,66 @@
           ]
         },
         "orientation": "horizontal",
-        "displayMode": "gradient"
+        "textMode": "auto",
+        "colorMode": "value"
       },
       "targets": [
         {
-          "expr": "sum by (clase) (solventa_seguridad_requests_total)",
-          "legendFormat": "{{clase}}"
+          "expr": "sum(solventa_seguridad_intrusiones_total{tipo=\"confidencialidad\"})"
         }
       ]
     },
     {
-      "id": 2,
-      "type": "bargauge",
-      "title": "Intrusiones por tipo",
+      "id": 112,
+      "type": "stat",
+      "title": "Incidentes de integridad",
+      "description": "Hash de perfil alterado en transito (mitmproxy), detectado inline por ms-cliente. No forma parte de la clasificacion de 'Requests por clase'.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "sum(solventa_seguridad_intrusiones_total{tipo=\"integridad\"})"
+        }
+      ]
+    },
+    {
+      "id": 113,
+      "type": "gauge",
+      "title": "% de requests que resultaron intrusion",
+      "description": "Tasa de intrusion sobre el total procesado: intrusiones_total / requests_total. A diferencia de los 4 numeros de la izquierda, este SI es comparable entre corridas de distinta duracion o volumen.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -133,13 +227,23 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
+                "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 40
               }
             ]
           }
@@ -153,12 +257,12 @@
           ]
         },
         "orientation": "horizontal",
-        "displayMode": "gradient"
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
       },
       "targets": [
         {
-          "expr": "sum by (tipo) (solventa_seguridad_intrusiones_total)",
-          "legendFormat": "{{tipo}}"
+          "expr": "100 * sum(solventa_seguridad_intrusiones_total) / sum(solventa_seguridad_requests_total)"
         }
       ]
     },
@@ -584,6 +688,67 @@
       "panels": []
     },
     {
+      "id": 105,
+      "type": "bargauge",
+      "title": "Requests por clase (total)",
+      "description": "Desglose de 'Incidentes de confidencialidad' del resumen: acceso_no_autorizado + anomala_comportamiento son los que generan incidente; legitima y rechazada no.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 18,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      },
+      "targets": [
+        {
+          "expr": "sum by (clase) (solventa_seguridad_requests_total)",
+          "legendFormat": "{{clase}}"
+        }
+      ]
+    },
+    {
+      "id": 114,
+      "type": "text",
+      "title": "Que es cada clase",
+      "gridPos": {
+        "x": 18,
+        "y": 37,
+        "w": 6,
+        "h": 6
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**legitima** — sesion validada, sin BOLA ni comportamiento anomalo.\n\n**acceso_no_autorizado** — BOLA: token de un cliente usado para pedir el perfil de otro.\n\n**anomala_comportamiento** — pais/device distinto del historial habitual del actor (score del detector >= umbral).\n\n**rechazada** — ms-identidad rechazo el token (firma invalida o vencido)."
+      }
+    },
+    {
       "id": 106,
       "type": "timeseries",
       "title": "Tasa de requests por clase",
@@ -593,7 +758,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 43,
         "w": 24,
         "h": 8
       },
