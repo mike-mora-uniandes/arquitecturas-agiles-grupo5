@@ -13,29 +13,71 @@ disponibilidad: no se valida solo en papel.
 | **ASR3** — reacción | Confidencialidad | notificar al analista de riesgo en `< 5 s` desde la detección |
 | **ASR4** — reacción | Integridad | notificar al analista de riesgo en `< 5 s` desde la detección |
 
+## Arquitectura
+
+```
+analista ─POST /perfil-riesgo─▶ ms-cliente ─validar-usuario─▶ ms-identidad
+                                     │  (BOLA deliberado: no compara
+                                     │   customer_id_token vs. solicitado)
+                                     ▼
+                                mitmproxy ──▶ ms-riesgo   (altera una fracción
+                                (siempre en          del perfil en tránsito,
+                                 el camino)           MITM_ATTACK_RATIO)
+                                     │
+                        ValidadorIntegridad (hash HMAC)
+                                     │
+                ┌────────────────────┼────────────────────┐
+                ▼                    ▼                     ▼
+     ReporteSesionAccion   ReporteExtraccionPerfil   IntegridadFallida
+     (ms-identidad)        (ms-riesgo)               (ms-cliente, si el
+                │                    │                 hash no coincide)
+                └────────────────────┴──────────┬──────────┘
+                                                 ▼
+                                             ms-audit
+                              (empareja por request_id, detector
+                               heurístico BOLA + comportamiento)
+                                                 │
+                                     incidente_seguridad
+                                                 ▼
+                                       ms-notificaciones
+                                (notifica al analista, mide reacción)
+```
+
+- **`ms-identidad`** — autentica/autoriza; contiene la vulnerabilidad
+  deliberada (BOLA) que el experimento explota.
+- **`ms-cliente`** — punto de entrada síncrono; orquesta identidad + riesgo y
+  verifica la integridad del perfil recibido.
+- **`mitmproxy`** — simula el segmento de red comprometido entre `ms-cliente`
+  y `ms-riesgo`; altera una fracción configurable de las respuestas.
+- **`ms-riesgo`** — custodia el perfil de riesgo (dato sensible) y lo firma
+  con un hash de integridad.
+- **`ms-audit`** — único servicio que emite incidentes de seguridad; clasifica
+  intrusiones y mide ASR1/ASR2.
+- **`ms-notificaciones`** — entrega el incidente al analista y mide ASR3/ASR4.
+- **Infra**: RabbitMQ (broker), 3 Postgres (uno por servicio con estado), y —
+  en el perfil `experimento` — OTel Collector + Prometheus + Grafana, con
+  Locust como generador de tráfico de ataque.
+
 ## Estado
 
-Puro andamiaje — ningún servicio tiene lógica de negocio todavía. Ver el
-reparto de tareas del equipo (Michael/Jeffrey/Daniel/Lorena) para el orden
-de construcción.
+Los 4 ASR están implementados y verificables end-to-end contra el stack
+levantado (ver «Ejecutar el experimento con métricas» más abajo).
 
 | Componente | Estado |
 |---|---|
 | Estructura + `docker-compose` + imagen base | ✅ |
-| `ms-identidad` (ValidarUsuario + BOLA deliberado) | ✅ |
-| `ms-riesgo` / `ms-cliente` (SolicitarPerfil + integridad) | ✅ (mergeado en esta rama desde `feature/seguridad-ms-riesgo-ms-cliente`) |
-| **`ms-cliente`** publica `IntegridadFallida` al broker (ASR2) | ✅ productor añadido en esta rama |
-| **`ms-audit`** (clasifica intrusiones, publica incidente) | ✅ consumidores + PostgreSQL + clasificador + métricas |
+| `ms-identidad` (`ValidarUsuario` + BOLA deliberado) | ✅ |
+| `ms-cliente` (orquestación + `ValidadorIntegridad` + productor `IntegridadFallida`) | ✅ |
+| `ms-riesgo` (`SolicitarPerfil` + `GeneradorIntegridad`) | ✅ |
+| `mitmproxy` (altera perfiles en tránsito, `MITM_ATTACK_RATIO`) | ✅ |
+| **`ms-audit`** (detector heurístico BOLA + comportamiento, clasifica y publica el incidente) | ✅ consumidores + PostgreSQL + clasificador + métricas |
 | **`ms-notificaciones`** (notifica al analista) | ✅ consume incidente + métrica de reacción |
 | **Observabilidad** (OTel + Prometheus + Grafana) | ✅ pipeline + dashboard por ASR (perfil `experimento`) |
-| `seed/` (datos dummy con Faker) | 🔀 en rama `feature/seguridad-seed-y-experimentos` |
-| `experimento/` (forjar token, mitmproxy) | 🔀 en rama `feature/seguridad-seed-y-experimentos` |
+| `seed/` (datos dummy con Faker, 3 bases) | ✅ ver [`seed/README.md`](seed/README.md) |
+| `experimento/` (`forjar_token.py`, `mitm_alterar_perfil.py`, `locustfile.py`) | ✅ ver [`experimento/README.md`](experimento/README.md) |
 
-> **Nota de integración:** esta rama consolida `feature/seguridad-ms-riesgo-ms-cliente`
-> (PR de Jeff) para cerrar el escenario de **integridad** (ASR2/ASR4)
-> end-to-end: `ms-cliente` ahora publica `IntegridadFallida` cuando el hash no
-> coincide, y `ms-audit` lo consume, mide y notifica. Ver el contrato en
-> [`ms-audit/README.md`](ms-audit/README.md#contrato-del-evento-integridadfallida).
+Contrato del evento `IntegridadFallida` (`ms-cliente` → `ms-audit`):
+[`ms-audit/README.md`](ms-audit/README.md#contrato-del-evento-integridadfallida).
 
 ## Decisiones de alcance pendientes de confirmar con el equipo
 
@@ -65,8 +107,9 @@ seguridad/
 ├── .env.example
 │
 ├── base-image/          # solventa/security-flask-base (propia de este experimento)
-├── seed/                 # Faker — puebla ms-identidad-db y ms-riesgo-db
+├── seed/                 # Faker — puebla ms-identidad-db, ms-riesgo-db y ms-audit-db
 ├── experimento/          # forjar_token.py (PyJWT) + mitm_alterar_perfil.py (mitmproxy)
+├── observabilidad/       # OTel Collector + Prometheus + Grafana (perfil `experimento`)
 │
 ├── ms-identidad/          # GestiónRoles + Autenticación/Autorización + GestionUsuarios
 ├── ms-cliente/            # GestionClientes + ValidadorIntegridad — punto de entrada
@@ -132,7 +175,7 @@ Para medir los ASR en Grafana en vivo:
    ```
 
 3. Ejecutar los ataques (ver [`experimento/`](experimento/README.md)) y abrir
-   el dashboard **Solventa · Experimento de seguridad** en
+   el dashboard **Solventa - Experimento de seguridad (Confidencialidad + Integridad)** en
    http://localhost:3001 → detección (ASR1/ASR2) vs. su umbral y notificación
    (ASR3/ASR4) vs. 5 s, con el `% que cumple` de cada uno.
 

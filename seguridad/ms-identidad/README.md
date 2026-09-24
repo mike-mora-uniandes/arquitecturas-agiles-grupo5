@@ -15,7 +15,10 @@ solicitan un perfil de riesgo, y dejar trazabilidad de cada sesión y acción.
   "customer_id_solicitado": "CLI-0007",
   "ip": "1.2.3.4",       // opcional, dummy
   "device": "iPhone",     // opcional, dummy
-  "pais": "CO"             // opcional, dummy
+  "pais": "CO",            // opcional, dummy
+  "request_id": "<uuid>"  // opcional; lo genera y propaga ms-cliente para
+                           // que ms-audit empareje esta sesión con su
+                           // extracción (ver ../ms-audit/README.md)
 }
 
 // Response 200
@@ -72,6 +75,5 @@ curl -s -XPOST http://localhost:6001/validar-usuario \
   -d '{"token": "<pegar el token>", "customer_id_solicitado": "CLI-0007"}'
 ```
 
-Pendiente:
-- Ninguno para este endpoint — falta que `ms-cliente` lo consuma en su
-  orquestación del flujo.
+`ms-cliente` ya consume este endpoint como primer paso de su orquestación
+(`../ms-cliente/logica/orquestador.py`) — ver `../ms-cliente/README.md`.

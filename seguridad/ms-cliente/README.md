@@ -29,6 +29,7 @@ verifica su hash de integridad antes de responder.
 { "error": "perfil 'CLI-0007' no encontrado" }
 // Response 502 — hash de integridad no coincide (perfil alterado en tránsito, ASR2)
 { "error": "el perfil recibido no superó la verificación de integridad" }
+// Response 400 — falta `token` o `customer_id` en el body (reqparse)
 ```
 
 Ruta propuesta por este servicio (no viene de ningún diagrama previo) — el
@@ -65,9 +66,8 @@ python -m pytest tests
 
 `requests` mockeado (`test_orquestador.py`: rechazo de identidad, éxito,
 perfil no encontrado, hash alterado) — no necesitan `ms-identidad` ni
-`ms-riesgo` corriendo.
+`ms-riesgo` corriendo. `test_vistas_cliente.py` cubre el mapeo HTTP de la
+orquestación mockeada (401/404/502/200/400).
 
-Pendiente:
-- Corrida end-to-end en `docker compose` contra `ms-identidad` real (PR #41
-  de Michael, aún no mergeado a `develop`) y datos de `../seed/` (a cargo de
-  Lorena).
+Corrida end-to-end verificada en `docker compose` contra `ms-identidad` y
+`ms-riesgo` reales, con datos poblados por `../seed/`.

@@ -52,7 +52,9 @@ riesgo en este experimento.
 
 Se publica en **cada** extracción atendida (perfil encontrado), sin firma:
 el punto de sensibilidad del experimento es el perfil que viaja hacia
-`ms-cliente`, no este canal interno de auditoría (ver `../README.md`).
+`ms-cliente`, no este canal interno de auditoría (ver `../README.md`). Lleva
+el `request_id` que `ms-cliente` propaga en el header `X-Request-Id` de la
+request GET, para que `ms-audit` empareje esta extracción con su sesión.
 
 ## Variables de entorno (ver `../.env.example`)
 
@@ -69,11 +71,13 @@ python -m pytest tests
 ```
 
 Sin BD ni broker reales: `test_vistas_riesgo.py` usa SQLite en memoria,
-`test_publicacion.py` mockea `send_task`.
+`test_publicacion.py` mockea `send_task`, `test_generador_integridad.py`
+cubre que el hash es determinista/depende de cada campo, y
+`test_extensiones.py` cubre el reintento de `esperar_bd` (Postgres puede
+tardar en aceptar conexiones tras arrancar — `depends_on` solo espera a que
+el contenedor inicie, no a que el servidor esté listo).
 
-Pendiente:
-- Coordinación con `ms-cliente` para el flujo completo end-to-end (hecho en
-  este mismo PR).
-- Datos reales del seed (`../seed/generar_seed.py:poblar_perfil_riesgo`, a
-  cargo de Lorena) — sin eso, `docker compose up` responde `404` para
-  cualquier `customer_id`.
+Flujo completo end-to-end con `ms-cliente` verificado, y `docker compose up`
+depende de que `seed` termine (`service_completed_successfully`) antes de
+arrancar, así que los `customer_id` de `../seed/generar_seed.py` (`CLI-0001`…)
+ya tienen perfil poblado — ver `../seed/README.md`.

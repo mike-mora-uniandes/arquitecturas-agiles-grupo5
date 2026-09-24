@@ -100,3 +100,18 @@ Cola/routing key/tarea (`INTEGRIDAD_*` en `.env.example`) coinciden entre
 Con `OTEL_SDK_DISABLED=true` (default) los instrumentos son no-op. Cada hijo
 del pool prefork recibe su propio `service.instance.id` (ver `telemetria.py` y
 la explicación extendida en `backend/ms-perfil-riesgo/telemetria.py`).
+
+## Pruebas
+
+```sh
+cd ms-audit
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest tests
+```
+
+`test_clasificador_intrusiones.py` cubre el detector heurístico contra
+SQLite en memoria (sin broker ni Postgres reales): BOLA sin historial,
+comportamiento improbable vs. habitual, patrones múltiples legítimos que no
+se marcan, que las conexiones anómalas no envenenan la línea base, el
+arranque en frío con historial insuficiente (solo BOLA aplica), y el
+emparejamiento por `request_id` en `evaluar_request`.

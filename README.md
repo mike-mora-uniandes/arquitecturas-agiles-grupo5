@@ -1,12 +1,70 @@
 # arquitecturas-agiles-grupo5
 
 Repositorio de trabajo del **Grupo 5** para la asignatura **Arquitecturas
-Ágiles** (MISO).
+Ágiles** (MISO), sobre el proyecto **Solventa**.
 
-Backend del **experimento de disponibilidad** del proyecto **Solventa**: un
-analista de riesgo solicita la evaluación del perfil de un cliente y el flujo
-aplica tres tácticas ante fallos de las fuentes externas Open Data / Open
-Finance.
+Contiene **dos experimentos independientes**, cada uno en su propio
+directorio de nivel superior con su propio `docker-compose.yml`, imagen base
+y rango de puertos (`backend/` usa `5001+`, `seguridad/` usa `6001+`), para
+poder levantar ambos stacks a la vez sin choques:
+
+| Experimento | Directorio | Atributo de calidad | Estado |
+|---|---|---|---|
+| **1 — Disponibilidad** | [`backend/`](backend/README.md) | *Availability* — tolerar fallos de Open Data / Open Finance | ✅ implementado y verificado (ASR1/ASR2/ASR3) |
+| **2 — Seguridad** | [`seguridad/`](seguridad/README.md) | *Confidentiality* + *Integrity* — detectar y reaccionar ante extracción/alteración no autorizada del perfil | ✅ implementado y verificado (ASR1–ASR4) |
+
+## Estructura del repositorio
+
+```
+.
+├── README.md                 # este archivo
+├── LICENSE
+│
+├── backend/                  # Experimento 1 — disponibilidad (puertos 5001+)
+│   ├── README.md             # ▶ guía operativa detallada (estructura, ejecución, pruebas)
+│   ├── DESIGN.md             # decisiones + contratos (local, gitignored)
+│   ├── docker-compose.yml
+│   ├── build-base.sh / .ps1
+│   ├── .env.example
+│   ├── base-image/           # solventa/flask-base (Flask + Celery + requests + OpenTelemetry)
+│   ├── ms-riesgos/           # API de entrada                → backend/ms-riesgos/README.md
+│   ├── ms-perfil-riesgo/     # cálculo + ASR1/ASR2/ASR3      → backend/ms-perfil-riesgo/README.md
+│   ├── ms-notificaciones/    # consumer del resultado        → backend/ms-notificaciones/README.md
+│   ├── redis/                # imagen Redis + seed           → backend/redis/README.md
+│   ├── wiremock/             # Open Data / Open Finance       → backend/wiremock/README.md
+│   ├── rabbitmq/             # notas del broker              → backend/rabbitmq/README.md
+│   ├── observabilidad/       # OTel Collector + Prometheus + Grafana → backend/observabilidad/README.md
+│   └── experimento/          # carga con Locust (matriz E0–E5)  → backend/experimento/README.md
+│
+└── seguridad/                 # Experimento 2 — confidencialidad + integridad (puertos 6001+)
+    ├── README.md             # ▶ guía operativa detallada (estructura, ejecución, ataques)
+    ├── docker-compose.yml
+    ├── build-base.sh
+    ├── .env.example
+    ├── base-image/           # solventa/security-flask-base
+    ├── seed/                 # Faker — puebla las 3 bases    → seguridad/seed/README.md
+    ├── experimento/          # ataques (JWT forjado, mitmproxy, Locust) → seguridad/experimento/README.md
+    ├── ms-identidad/         # auth/roles + BOLA deliberado  → seguridad/ms-identidad/README.md
+    ├── ms-cliente/           # entrada + verificación integridad → seguridad/ms-cliente/README.md
+    ├── ms-riesgo/            # perfil + firma de integridad  → seguridad/ms-riesgo/README.md
+    ├── ms-audit/             # clasifica intrusiones         → seguridad/ms-audit/README.md
+    ├── ms-notificaciones/    # notifica al analista          → seguridad/ms-notificaciones/README.md
+    └── observabilidad/       # OTel Collector + Prometheus + Grafana → seguridad/observabilidad/README.md
+```
+
+Cada subcarpeta de `backend/` y `seguridad/` tiene su propio `README.md` con
+el detalle del componente. Ambos experimentos comparten el mismo layout
+plano por microservicio (`app.py`, `config.py`, `extensiones.py`, `run.sh`,
+`Dockerfile`, `vistas/ logica/ tareas/ tests/`) y el mismo *language split*:
+español para identificadores/comentarios/commits internos, inglés para todo
+lo que viaja "en el cable" (JSON, colas, routing keys, env vars, nombres
+OTel).
+
+## Experimento 1 — Disponibilidad
+
+Un analista de riesgo solicita la evaluación del perfil de un cliente y el
+flujo aplica tres tácticas ante fallos de las fuentes externas Open Data /
+Open Finance.
 
 | ASR | Táctica | Objetivo |
 |---|---|---|
@@ -14,7 +72,7 @@ Finance.
 | **ASR3** | *Retry* | backoff exponencial + jitter, `≤ 3` intentos, `≤ 5 s` totales |
 | **ASR2** | *Exception Handling* | degradar con el respaldo de Redis en `< 100 ms` extra, sin error visible al analista |
 
-## Arquitectura
+### Arquitectura
 
 Tres microservicios Python (Flask + Celery) sobre un **Event Bus** RabbitMQ:
 
@@ -41,7 +99,7 @@ El diseño detallado y los contratos vigentes (mensajes, topología RabbitMQ,
 esquema de Wiremock, nombres OTel) están en `backend/DESIGN.md` (documento local,
 no versionado).
 
-## Estado
+### Estado
 
 | Componente | Estado |
 |---|---|
@@ -54,33 +112,7 @@ no versionado).
 | Observabilidad (OTel Collector + Prometheus + Grafana) | ✅ pipeline + dashboard con panel por ASR |
 | Carga (Locust) | ✅ matriz `E0`–`E5` |
 
-## Estructura del repositorio
-
-```
-.
-├── README.md                 # este archivo
-├── LICENSE
-└── backend/                  # todo el backend del experimento
-    ├── README.md             # ▶ guía operativa detallada (estructura, ejecución, pruebas)
-    ├── DESIGN.md             # decisiones + contratos (local, gitignored)
-    ├── docker-compose.yml
-    ├── build-base.sh / .ps1
-    ├── .env.example
-    ├── base-image/           # solventa/flask-base (Flask + Celery + requests + OpenTelemetry)
-    ├── ms-riesgos/           # API de entrada                → backend/ms-riesgos/README.md
-    ├── ms-perfil-riesgo/     # cálculo + ASR1/ASR2/ASR3      → backend/ms-perfil-riesgo/README.md
-    ├── ms-notificaciones/    # consumer del resultado        → backend/ms-notificaciones/README.md
-    ├── redis/                # imagen Redis + seed           → backend/redis/README.md
-    ├── wiremock/             # Open Data / Open Finance       → backend/wiremock/README.md
-    ├── rabbitmq/             # notas del broker              → backend/rabbitmq/README.md
-    ├── observabilidad/       # OTel Collector + Prometheus + Grafana → backend/observabilidad/README.md
-    └── experimento/          # carga con Locust (matriz E0–E5)  → backend/experimento/README.md
-```
-
-Cada subcarpeta de `backend/` tiene su propio `README.md` con el detalle del
-componente.
-
-## Puesta en marcha rápida
+### Puesta en marcha rápida
 
 > [!NOTE]
 > Levanta el stack base (6 microservicios + infra) en modo normal para probar el
@@ -114,7 +146,7 @@ docker compose --profile experimento up -d --build
 Locust, lectura del dashboard de Grafana, reinicio entre corridas) están en
 [`backend/README.md`](backend/README.md).**
 
-## Ejecutar el experimento de disponibilidad de arquitectura (con métricas y carga)
+### Ejecutar el experimento de disponibilidad (con métricas y carga)
 
 > [!NOTE]
 > Levanta el stack completo (observabilidad + Locust), genera carga con fallos
@@ -223,6 +255,129 @@ Todo se ejecuta desde `backend/`.
    ```sh
    docker compose --profile experimento down -v
    ```
+
+## Experimento 2 — Seguridad (confidencialidad + integridad)
+
+Un analista de riesgo consulta el perfil de un cliente a través de
+`ms-cliente`; el experimento materializa dos ataques reales contra el stack
+en ejecución — un JWT forjado (confidencialidad) y una alteración del perfil
+en tránsito vía `mitmproxy` (integridad) — y mide cuánto tarda el sistema en
+**detectar** y en **reaccionar** ante cada uno.
+
+| ASR | Atributo | Objetivo |
+|---|---|---|
+| **ASR1** — detección | Confidencialidad | detectar la extracción no autorizada en `< 200 ms` |
+| **ASR2** — detección | Integridad | detectar la alteración no autorizada en `< 500 ms` |
+| **ASR3** — reacción | Confidencialidad | notificar al analista en `< 5 s` desde la detección |
+| **ASR4** — reacción | Integridad | notificar al analista en `< 5 s` desde la detección |
+
+### Arquitectura
+
+Cinco microservicios Python (Flask + Celery) sobre un **Event Bus** RabbitMQ
+propio (`solventa-seguridad`, distinto del de `backend/`), con un
+`mitmproxy` siempre interpuesto entre `ms-cliente` y `ms-riesgo`:
+
+```
+analista ─POST /perfil-riesgo─▶ ms-cliente ─validar-usuario─▶ ms-identidad
+                                     │
+                                     ▼
+                                mitmproxy ──▶ ms-riesgo
+                          (altera una fracción de las respuestas,
+                                MITM_ATTACK_RATIO)
+                                     │
+                     ValidadorIntegridad (hash HMAC) en ms-cliente
+                                     │
+      ReporteSesionAccion / ReporteExtraccionPerfil / IntegridadFallida
+                                     ▼
+                                 ms-audit  ──incidente_seguridad──▶ ms-notificaciones
+                       (detector heurístico:                (notifica al analista,
+                        BOLA + comportamiento)                mide ASR3/ASR4)
+```
+
+- **`ms-identidad`** — identifica, autentica y autoriza. Contiene una
+  vulnerabilidad **deliberada** de tipo BOLA (no valida que el `customer_id`
+  del token coincida con el solicitado) que el ataque de confidencialidad
+  explota; la detección corre aguas abajo, en `ms-audit`.
+- **`ms-cliente`** — único punto de entrada HTTP síncrono del flujo; orquesta
+  `ms-identidad` → `ms-riesgo` y verifica el hash de integridad del perfil
+  recibido antes de responder.
+- **`ms-riesgo`** — custodia el perfil de riesgo (dato sensible/PII) y lo
+  firma con `hmac-sha256` (`GeneradorIntegridad`).
+- **`ms-audit`** — único servicio que **emite** incidentes de seguridad;
+  correlaciona los eventos por `request_id`, clasifica intrusiones con un
+  detector heurístico (BOLA determinista + anomalía de comportamiento
+  `país`/`device` bayesiana) y mide ASR1/ASR2.
+- **`ms-notificaciones`** — consume el incidente, lo registra (evidencia
+  end-to-end, notificación real al analista fuera de alcance) y mide
+  ASR3/ASR4.
+- **Infra**: RabbitMQ (broker propio), 3 PostgreSQL (uno por servicio con
+  estado), `mitmproxy` (segmento de red comprometido simulado), y — en el
+  perfil `experimento` — OTel Collector + Prometheus + Grafana, con Locust
+  como generador de tráfico de ataque.
+
+El detalle completo (contratos de eventos, detector heurístico, decisiones de
+alcance aún abiertas) está en [`seguridad/README.md`](seguridad/README.md).
+
+### Estado
+
+| Componente | Estado |
+|---|---|
+| Estructura + `docker-compose` + imagen base propia | ✅ |
+| `ms-identidad` (`ValidarUsuario` + BOLA deliberado) | ✅ |
+| `ms-cliente` (orquestación + `ValidadorIntegridad` + productor `IntegridadFallida`) | ✅ |
+| `ms-riesgo` (`SolicitarPerfil` + `GeneradorIntegridad`) | ✅ |
+| `mitmproxy` (altera perfiles en tránsito) | ✅ |
+| `ms-audit` (detector heurístico + clasificación + incidente) | ✅ |
+| `ms-notificaciones` (notifica al analista) | ✅ |
+| Observabilidad (OTel Collector + Prometheus + Grafana) | ✅ pipeline + dashboard por ASR |
+| `seed/` (datos dummy con Faker, 3 bases) | ✅ |
+| `experimento/` (JWT forjado + mitmproxy + Locust) | ✅ |
+
+### Puesta en marcha rápida
+
+Requisitos: Docker Desktop con Compose v2. Todo se ejecuta desde `seguridad/`.
+
+```sh
+cd seguridad
+sh build-base.sh
+```
+
+El script crea `.env` desde `.env.example`, construye la imagen base
+`solventa/security-flask-base` y levanta el stack (incluye el `seed`, que
+puebla las 3 bases con datos dummy y termina).
+
+```sh
+# forjar un token de CLI-0001 y pedir el perfil de otro cliente (CLI-0007) — ver seguridad/ms-identidad/README.md
+python3 -c "import jwt; print(jwt.encode({'customer_id': 'CLI-0001'}, 'change-me', algorithm='HS256'))"
+curl -s -XPOST http://localhost:6002/perfil-riesgo \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"<token>","customer_id":"CLI-0007"}'
+```
+
+Detener: `docker compose down` (o `down -v` para también borrar los datos de
+las 3 bases).
+
+### Ejecutar el experimento (con métricas)
+
+1. Activar la telemetría en `seguridad/.env`: `OTEL_SDK_DISABLED=false`,
+   `OTEL_TRACES_EXPORTER=otlp`, `OTEL_METRICS_EXPORTER=otlp`.
+2. Levantar el stack completo (añade `otel-collector`, `prometheus`,
+   `grafana`): `docker compose --profile experimento up -d --build`.
+3. Ejercitar los 4 ASR — mitmproxy ya está en el camino por defecto
+   (`MITM_ATTACK_RATIO=0.2`, ~20 % de los perfiles alterados), así que **una
+   sola corrida de Locust** en http://localhost:8089 ejercita confidencialidad
+   (tráfico BOLA/anómalo, caso `unauthorized`) e integridad (fracción
+   alterada) a la vez; para un disparo puntual manual de confidencialidad,
+   ver la alternativa con `curl` en
+   [`seguridad/experimento/README.md`](seguridad/experimento/README.md)
+   (`experimento/forjar_token.py` está desactualizado, ver nota ahí).
+4. Observar el dashboard **Solventa - Experimento de seguridad (Confidencialidad + Integridad)** en
+   http://localhost:3001: detección (ASR1/ASR2) vs. su umbral y notificación
+   (ASR3/ASR4) vs. 5 s, con el `% que cumple` de cada uno.
+
+Evidencia sin Grafana: `docker compose logs -f ms-audit ms-notificaciones` y
+`GET http://localhost:6004/incidentes`. Pasos y escenarios detallados en
+[`seguridad/experimento/README.md`](seguridad/experimento/README.md).
 
 ## Flujo de trabajo
 

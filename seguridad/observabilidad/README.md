@@ -38,15 +38,21 @@ remapeo de host no afecta la red interna).
 | `grafana/provisioning/dashboards/dashboards.yml` | provisioning del dashboard |
 | `grafana/provisioning/dashboards/solventa-seguridad.json` | **dashboard del experimento** |
 
-## Dashboard — *Solventa · Experimento de seguridad*
+## Dashboard — *Solventa - Experimento de seguridad (Confidencialidad + Integridad)*
 
 | Fila | Panel | Query base |
 |---|---|---|
-| Resumen | Intrusiones detectadas / por tipo | `solventa_seguridad_intrusiones_total` |
-| ASR1 | P99 detección confidencialidad vs. 200 ms · % cumple | `tiempo_deteccion_confidencialidad_ms_milliseconds_bucket` · `..._asr1_within_threshold_total` |
-| ASR2 | P99 detección integridad vs. 500 ms · % cumple | `tiempo_deteccion_integridad_ms_milliseconds_bucket` · `..._asr2_within_threshold_total` |
-| ASR3/4 | P99 notificación vs. 5 s (por tipo) · % cumple | `tiempo_notificacion_ms_milliseconds_bucket` · `..._asr_notificacion_within_total` |
+| Resumen | Intrusiones detectadas (total) | `sum(solventa_seguridad_intrusiones_total)` |
+| Resumen | Requests procesadas (total) | `sum(solventa_seguridad_requests_total)` |
+| Resumen | Incidentes de confidencialidad / de integridad | `sum(solventa_seguridad_intrusiones_total{tipo="..."})` |
+| Resumen | % de requests que resultaron intrusión | `100 * intrusiones_total / requests_total` |
+| ASR1 | P95 detección confidencialidad vs. 200 ms · % que cumple | `histogram_quantile(0.95, ...tiempo_deteccion_confidencialidad_ms_milliseconds_bucket)` · `..._asr1_within_threshold_total` |
+| ASR2 | P95 detección integridad vs. 500 ms · % que cumple | `histogram_quantile(0.95, ...tiempo_deteccion_integridad_ms_milliseconds_bucket)` · `..._asr2_within_threshold_total` |
+| ASR3/4 | P95 notificación vs. 5 s, por tipo · % que cumple (por separado ASR3/ASR4) | `histogram_quantile(0.95, ...tiempo_notificacion_ms_milliseconds_bucket by tipo)` · `..._asr_notificacion_within_total{tipo,pass}` |
+| Tráfico observado | Requests por clase (total) + tasa por clase + leyenda de qué es cada clase (`legitima`, `acceso_no_autorizado`, `anomala_comportamiento`, `rechazada`) | `sum by (clase) (solventa_seguridad_requests_total)` · `rate(...[1m])` |
 
 > El exporter de Prometheus añade el sufijo `_milliseconds` al nombre de los
 > histogramas cuya unidad es `ms` (por eso las series se llaman
-> `tiempo_*_ms_milliseconds_bucket`), igual que en el experimento 1.
+> `tiempo_*_ms_milliseconds_bucket`), igual que en el experimento 1. Las
+> clases de tráfico las asigna `ms-audit/logica/detector.py:clasificar_trafico`
+> (clasificación observada por el detector, no ground-truth).
