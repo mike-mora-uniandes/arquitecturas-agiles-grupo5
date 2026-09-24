@@ -15,7 +15,10 @@ solicitan un perfil de riesgo, y dejar trazabilidad de cada sesión y acción.
   "customer_id_solicitado": "CLI-0007",
   "ip": "1.2.3.4",       // opcional, dummy
   "device": "iPhone",     // opcional, dummy
-  "pais": "CO"             // opcional, dummy
+  "pais": "CO",            // opcional, dummy
+  "request_id": "<uuid>"  // opcional; lo genera y propaga ms-cliente para
+                           // que ms-audit empareje esta sesión con su
+                           // extracción (ver ../ms-audit/README.md)
 }
 
 // Response 200

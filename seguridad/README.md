@@ -109,6 +109,7 @@ seguridad/
 ├── base-image/          # solventa/security-flask-base (propia de este experimento)
 ├── seed/                 # Faker — puebla ms-identidad-db, ms-riesgo-db y ms-audit-db
 ├── experimento/          # forjar_token.py (PyJWT) + mitm_alterar_perfil.py (mitmproxy)
+├── observabilidad/       # OTel Collector + Prometheus + Grafana (perfil `experimento`)
 │
 ├── ms-identidad/          # GestiónRoles + Autenticación/Autorización + GestionUsuarios
 ├── ms-cliente/            # GestionClientes + ValidadorIntegridad — punto de entrada
@@ -174,7 +175,7 @@ Para medir los ASR en Grafana en vivo:
    ```
 
 3. Ejecutar los ataques (ver [`experimento/`](experimento/README.md)) y abrir
-   el dashboard **Solventa · Experimento de seguridad** en
+   el dashboard **Solventa - Experimento de seguridad (Confidencialidad + Integridad)** en
    http://localhost:3001 → detección (ASR1/ASR2) vs. su umbral y notificación
    (ASR3/ASR4) vs. 5 s, con el `% que cumple` de cada uno.
 

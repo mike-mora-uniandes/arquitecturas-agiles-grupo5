@@ -371,7 +371,7 @@ las 3 bases).
    ver la alternativa con `curl` en
    [`seguridad/experimento/README.md`](seguridad/experimento/README.md)
    (`experimento/forjar_token.py` está desactualizado, ver nota ahí).
-4. Observar el dashboard **Solventa · Experimento de seguridad** en
+4. Observar el dashboard **Solventa - Experimento de seguridad (Confidencialidad + Integridad)** en
    http://localhost:3001: detección (ASR1/ASR2) vs. su umbral y notificación
    (ASR3/ASR4) vs. 5 s, con el `% que cumple` de cada uno.
 
