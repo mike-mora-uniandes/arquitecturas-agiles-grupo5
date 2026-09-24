@@ -67,7 +67,5 @@ python -m pytest tests
 perfil no encontrado, hash alterado) — no necesitan `ms-identidad` ni
 `ms-riesgo` corriendo.
 
-Pendiente:
-- Corrida end-to-end en `docker compose` contra `ms-identidad` real (PR #41
-  de Michael, aún no mergeado a `develop`) y datos de `../seed/` (a cargo de
-  Lorena).
+Corrida end-to-end verificada en `docker compose` contra `ms-identidad` y
+`ms-riesgo` reales, con datos poblados por `../seed/`.

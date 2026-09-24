@@ -72,6 +72,5 @@ curl -s -XPOST http://localhost:6001/validar-usuario \
   -d '{"token": "<pegar el token>", "customer_id_solicitado": "CLI-0007"}'
 ```
 
-Pendiente:
-- Ninguno para este endpoint — falta que `ms-cliente` lo consuma en su
-  orquestación del flujo.
+`ms-cliente` ya consume este endpoint como primer paso de su orquestación
+(`../ms-cliente/logica/orquestador.py`) — ver `../ms-cliente/README.md`.
