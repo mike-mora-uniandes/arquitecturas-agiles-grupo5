@@ -366,8 +366,11 @@ las 3 bases).
 3. Ejercitar los 4 ASR — mitmproxy ya está en el camino por defecto
    (`MITM_ATTACK_RATIO=0.2`, ~20 % de los perfiles alterados), así que **una
    sola corrida de Locust** en http://localhost:8089 ejercita confidencialidad
-   (tráfico BOLA/anómalo) e integridad (fracción alterada) a la vez; o usar
-   `experimento/forjar_token.py` para un disparo puntual de confidencialidad.
+   (tráfico BOLA/anómalo, caso `unauthorized`) e integridad (fracción
+   alterada) a la vez; para un disparo puntual manual de confidencialidad,
+   ver la alternativa con `curl` en
+   [`seguridad/experimento/README.md`](seguridad/experimento/README.md)
+   (`experimento/forjar_token.py` está desactualizado, ver nota ahí).
 4. Observar el dashboard **Solventa · Experimento de seguridad** en
    http://localhost:3001: detección (ASR1/ASR2) vs. su umbral y notificación
    (ASR3/ASR4) vs. 5 s, con el `% que cumple` de cada uno.
