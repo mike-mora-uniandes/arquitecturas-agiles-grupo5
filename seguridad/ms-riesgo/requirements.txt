@@ -1,0 +1,2 @@
+# Extras de MS Riesgo sobre la imagen base (solventa/security-flask-base).
+# Sin dependencias propias por ahora; añádelas aquí.

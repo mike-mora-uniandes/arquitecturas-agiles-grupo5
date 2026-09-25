@@ -1,0 +1,214 @@
+# Orquestación local del experimento de seguridad (confidencialidad +
+# integridad). Requisito previo: construir la imagen base con
+# sh build-base.sh (equivale a:
+#   docker build -t solventa/security-flask-base:latest ./base-image )
+#
+# Puertos de host distintos a los de backend/ (experimento 1) a propósito,
+# para poder levantar ambos stacks al mismo tiempo sin choques.
+
+name: solventa-seguridad
+
+x-ms-common: &ms-common
+  env_file: .env
+  restart: "no"        # si un servicio falla, que quede visible, no en bucle
+
+services:
+
+  # ----------------------------- Infraestructura -----------------------------
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5673:5672"     # AMQP
+      - "15673:15672"   # consola de administración
+
+  ms-identidad-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: solventa
+      POSTGRES_PASSWORD: solventa
+      POSTGRES_DB: identidad
+    ports:
+      - "5433:5432"
+
+  ms-riesgo-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: solventa
+      POSTGRES_PASSWORD: solventa
+      POSTGRES_DB: perfilriesgo
+    ports:
+      - "5434:5432"
+
+  ms-audit-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: solventa
+      POSTGRES_PASSWORD: solventa
+      POSTGRES_DB: audit
+    ports:
+      - "5435:5432"
+
+  seed:
+    # Puebla ms-identidad-db y ms-riesgo-db con datos dummy (Faker). One-shot.
+    <<: *ms-common
+    build: ./seed
+    depends_on:
+      - ms-identidad-db
+      - ms-riesgo-db
+      - ms-audit-db
+
+  # ----------------------------- Microservicios -----------------------------
+
+  ms-identidad:
+    <<: *ms-common
+    build: ./ms-identidad
+    environment:
+      OTEL_SERVICE_NAME: ms-identidad
+    ports:
+      - "6001:5000"
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      ms-identidad-db:
+        condition: service_started
+      # Esperar a que el seed TERMINE (no solo que arranque): así el seed crea
+      # las tablas con su esquema y las puebla antes de que este servicio haga
+      # create_all, evitando la carrera de esquemas en `usuarios`.
+      seed:
+        condition: service_completed_successfully
+
+  ms-cliente:
+    <<: *ms-common
+    build: ./ms-cliente
+    environment:
+      OTEL_SERVICE_NAME: ms-cliente
+      # Siempre a través de mitmproxy: simula el segmento de red comprometido
+      # entre ms-cliente y ms-riesgo. mitmproxy altera solo una fracción
+      # (MITM_ATTACK_RATIO), así una sola corrida ejercita confidencialidad
+      # (tráfico intacto) e integridad (fracción alterada).
+      MS_RIESGO_URL: http://mitmproxy:8081
+    ports:
+      - "6002:5000"
+    depends_on:
+      - ms-identidad
+      - ms-riesgo
+      - mitmproxy
+
+  mitmproxy:
+    # Reverse-proxy delante de ms-riesgo que altera el `puntaje` de una fracción
+    # de los perfiles en tránsito (experimento/mitm_alterar_perfil.py), para el
+    # escenario de integridad (ASR2/ASR4). MITM_ATTACK_RATIO=0 lo deja como
+    # passthrough (flujo funcional puro); 1.0 altera todo (corrida dedicada).
+    image: mitmproxy/mitmproxy:10.4.2
+    environment:
+      MITM_ATTACK_RATIO: ${MITM_ATTACK_RATIO:-0.2}
+    command: >
+      mitmdump -s /addon/mitm_alterar_perfil.py
+      --mode reverse:http://ms-riesgo:5000
+      --listen-port 8081
+      --set connection_strategy=lazy
+    volumes:
+      - ./experimento:/addon:ro
+    depends_on:
+      - ms-riesgo
+
+  ms-riesgo:
+    <<: *ms-common
+    build: ./ms-riesgo
+    environment:
+      OTEL_SERVICE_NAME: ms-riesgo
+    ports:
+      - "6003:5000"
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      ms-riesgo-db:
+        condition: service_started
+      # Esperar a que el seed TERMINE antes de create_all (ver ms-identidad).
+      seed:
+        condition: service_completed_successfully
+
+  ms-audit:
+    <<: *ms-common
+    build: ./ms-audit
+    environment:
+      OTEL_SERVICE_NAME: ms-audit
+    ports:
+      - "6004:5000"
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      ms-audit-db:
+        condition: service_started
+      # Espera a que el seed cree y pueble comportamiento_habitual (línea base
+      # para la detección por comportamiento) antes de consumir eventos.
+      seed:
+        condition: service_completed_successfully
+
+  ms-notificaciones:
+    <<: *ms-common
+    build: ./ms-notificaciones
+    environment:
+      OTEL_SERVICE_NAME: ms-notificaciones
+    ports:
+      - "6005:5000"
+    depends_on:
+      - rabbitmq
+
+  # ----------------------------- Carga (Locust) -----------------------------
+  # Se levanta junto con el stack para ejecutar el experimento de seguridad con
+  # escenario reproducible. El valor por defecto es ataque; cambiarlo en
+  # SCENARIO si quieres correr baseline.
+  locust:
+    build: ./experimento
+    volumes:
+      - ./experimento:/mnt/locust:ro
+    environment:
+      SCENARIO: attack
+      SECURITY_BASE_URL: http://ms-cliente:5000
+      JWT_SECRET: change-me
+      LOAD_SEED: 20240601
+    command: ["-f", "/mnt/locust/locustfile.py", "--host", "http://ms-cliente:5000"]
+    ports:
+      - "8089:8089"
+    depends_on:
+      - ms-cliente
+
+  # ------------------- Observabilidad (perfil "experimento") -----------------
+  # Solo se levantan con `docker compose --profile experimento up`. El stack
+  # base (sin este perfil) corre el flujo funcional sin métricas. Mismo patrón
+  # y mismas imágenes que ../backend/ (experimento 1); puertos de host
+  # distintos para poder correr ambos experimentos a la vez.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    profiles: ["experimento"]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observabilidad/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4319:4318"     # OTLP http (4318 lo usa el experimento 1)
+      - "9465:9464"     # métricas expuestas para Prometheus
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: ["experimento"]
+    volumes:
+      - ./observabilidad/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: ["experimento"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observabilidad/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
